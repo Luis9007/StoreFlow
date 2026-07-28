@@ -1,5 +1,6 @@
 import type { Customer } from '../models/types';
 import { supabase, isSupabaseConfigured } from '../models/supabase';
+import { syncService } from './syncService';
 
 export const customerService = {
   async fetchCustomers(): Promise<Customer[]> {
@@ -21,17 +22,27 @@ export const customerService = {
   },
 
   async upsertCustomer(c: Customer): Promise<void> {
-    if (!isSupabaseConfigured) return;
-    await supabase.from('customers').upsert({
-      id: c.id,
-      name: c.name,
-      document: c.document,
-      phone: c.phone,
-      email: c.email,
-      address: c.address,
-      balance: c.balance,
-      notes: c.notes,
-    });
+    if (!isSupabaseConfigured) {
+      syncService.addToPendingQueue({ id: c.id, type: 'customer', payload: c });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('customers').upsert({
+        id: c.id,
+        name: c.name,
+        document: c.document,
+        phone: c.phone,
+        email: c.email,
+        address: c.address,
+        balance: c.balance,
+        notes: c.notes,
+      });
+      if (error) throw error;
+    } catch (err) {
+      console.warn('Supabase customer upsert failed, enqueuing for offline sync:', err);
+      syncService.addToPendingQueue({ id: c.id, type: 'customer', payload: c });
+    }
   },
 
   async deleteCustomer(id: string): Promise<void> {

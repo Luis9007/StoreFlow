@@ -12,6 +12,7 @@ import { customerService } from '../services/customerService';
 import { purchaseService } from '../services/purchaseService';
 import { salesService } from '../services/salesService';
 import { settingsService } from '../services/settingsService';
+import { syncService } from '../services/syncService';
 
 import { useAuthController } from './AuthController';
 import { useCashController } from './CashController';
@@ -176,6 +177,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveDbToStorage(db);
     }
   }, [db]);
+
+  // Offline Queue Heartbeat & Auto-Sync Engine
+  useEffect(() => {
+    let isProcessing = false;
+
+    async function triggerAutoSync() {
+      if (isProcessing || !isSupabaseConfigured) return;
+      isProcessing = true;
+      try {
+        const queue = syncService.getPendingQueue();
+        if (queue.length > 0) {
+          const { success, failed } = await syncService.processPendingQueue();
+          if (success > 0) {
+            console.log(`[AutoSync] Sincronizados con éxito ${success} registros pendientes con Supabase.`);
+          }
+        }
+      } catch (err) {
+        console.error('[AutoSync] Error durante la auto-sincronización:', err);
+      } finally {
+        isProcessing = false;
+      }
+    }
+
+    const interval = setInterval(triggerAutoSync, 15000);
+    window.addEventListener('online', triggerAutoSync);
+
+    triggerAutoSync();
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', triggerAutoSync);
+    };
+  }, []);
 
   const value: StoreContextValue = {
     db,

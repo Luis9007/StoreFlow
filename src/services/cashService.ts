@@ -1,5 +1,6 @@
 import type { CashSession, CashMovement, CashMovementType } from '../models/types';
 import { supabase, isSupabaseConfigured } from '../models/supabase';
+import { syncService } from './syncService';
 
 export const cashService = {
   async fetchCashData(): Promise<{ cashSessions: CashSession[]; cashMovements: CashMovement[] }> {
@@ -75,18 +76,26 @@ export const cashService = {
   },
 
   async insertMovement(m: CashMovement, activeSessionId?: string | null): Promise<void> {
-    if (!isSupabaseConfigured || !activeSessionId) return;
+    if (!isSupabaseConfigured) {
+      syncService.addToPendingQueue({ id: m.id, type: 'cash_movement', payload: { ...m, sessionId: activeSessionId } });
+      return;
+    }
 
-    await supabase.from('cash_movements').insert({
-      id: m.id,
-      session_id: activeSessionId,
-      type: m.type,
-      amount: m.amount,
-      concept: m.concept,
-      reference: m.reference,
-      details: m.details ? JSON.stringify(m.details) : null,
-      user_id: m.userId || null,
-      user_name: m.userName,
-    });
+    try {
+      await supabase.from('cash_movements').insert({
+        id: m.id,
+        session_id: activeSessionId || null,
+        type: m.type,
+        amount: m.amount,
+        concept: m.concept,
+        reference: m.reference,
+        details: m.details ? JSON.stringify(m.details) : null,
+        user_id: m.userId || null,
+        user_name: m.userName,
+      });
+    } catch (err) {
+      console.warn('Supabase cash movement failed, enqueuing for offline sync:', err);
+      syncService.addToPendingQueue({ id: m.id, type: 'cash_movement', payload: { ...m, sessionId: activeSessionId } });
+    }
   },
 };
