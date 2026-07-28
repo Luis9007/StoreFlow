@@ -1,34 +1,24 @@
 /**
  * @file settingsService.ts
- * @description Capa de Servicio / Acceso a Datos para Configuración de la Empresa, Temas Visuales y Bitácora de Actividades.
+ * @description Capa de Servicio / Lógica de Negocio para Configuración del Sistema y Bitácora de Actividades.
  * 
- * RELACIÓN CON EL CONTROLADOR (`src/controllers/SettingsController.ts`):
- * - `settingsService` realiza peticiones HTTP REST a las tablas `company_settings` y `activity_logs`.
- * - `SettingsController.ts` llama a estos métodos para guardar la configuración:
- *    • `SettingsController.updateSettings()` ➔ llama a `settingsService.upsertSettings(s)`
- *    • `SettingsController.setTheme()` ➔ llama a `settingsService.updateTheme(theme)`
- * - `StoreController.tsx` invoca `settingsService.insertLog(log)` al registrar eventos en la bitácora global
- *   y llama a `settingsService.fetchSettingsAndLogs()` al iniciar la aplicación.
+ * REGLA DE ARQUITECTURA:
+ * - `settingsService` maneja preferencias de negocio y registros de auditoría.
+ * - Consume ÚNICAMENTE el modelo `settingsModel` (sin llamadas directas a Supabase).
+ * - Es invocado por `SettingsController.ts` y `StoreController.tsx`.
  */
 
 import type { CompanySettings, ActivityLog } from '../models/types';
 import { seedDatabase } from '../models/seed';
-import { supabase, isSupabaseConfigured } from '../models/supabase';
+import { settingsModel } from '../models/settingsModel';
 
 export const settingsService = {
   /**
-   * Consulta la configuración general del negocio y los últimos 100 registros de la bitácora de auditoría vía HTTP GET.
-   * Invocado por: `StoreController.tsx` durante la carga inicial.
+   * Obtiene la configuración e historial de logs desde settingsModel.
    */
   async fetchSettingsAndLogs(): Promise<{ settings: CompanySettings; logs: ActivityLog[] }> {
-    if (!isSupabaseConfigured) return { settings: seedDatabase.settings, logs: [] };
+    const { settings, logs } = await settingsModel.findSettingsAndLogs();
 
-    const [{ data: settings }, { data: logs }] = await Promise.all([
-      supabase.from('company_settings').select('*').single(),
-      supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(100),
-    ]);
-
-    // Mapea la configuración recibida o usa los valores predeterminados de semilla
     const mappedSettings: CompanySettings = settings
       ? {
           name: settings.name,
@@ -45,8 +35,7 @@ export const settingsService = {
         }
       : seedDatabase.settings;
 
-    // Mapea las entradas de bitácora
-    const mappedLogs: ActivityLog[] = (logs || []).map((l) => ({
+    const mappedLogs: ActivityLog[] = logs.map((l) => ({
       id: l.id,
       action: l.action,
       detail: l.detail || '',
@@ -59,49 +48,23 @@ export const settingsService = {
   },
 
   /**
-   * Actualiza los parámetros de la empresa en la base de datos mediante un HTTP POST/UPSERT.
-   * Invocado por: `SettingsController.updateSettings()`
+   * Actualiza la configuración general vía settingsModel.
    */
   async upsertSettings(s: Partial<CompanySettings>): Promise<void> {
-    if (!isSupabaseConfigured) return;
-    await supabase.from('company_settings').upsert({
-      id: 1,
-      name: s.name,
-      legal_name: s.legalName,
-      tax_id: s.taxId,
-      address: s.address,
-      phone: s.phone,
-      email: s.email,
-      currency: s.currency,
-      currency_symbol: s.currencySymbol,
-      tax_rate: s.taxRate,
-      logo_text: s.logoText,
-      theme: s.theme,
-    });
+    await settingsModel.upsertSettings(s);
   },
 
   /**
-   * Actualiza únicamente la preferencia de tema visual ('light' o 'dark') vía HTTP PATCH.
-   * Invocado por: `SettingsController.setTheme()`
+   * Actualiza el tema visual vía settingsModel.
    */
   async updateTheme(theme: 'light' | 'dark'): Promise<void> {
-    if (!isSupabaseConfigured) return;
-    await supabase.from('company_settings').update({ theme }).eq('id', 1);
+    await settingsModel.updateTheme(theme);
   },
 
   /**
-   * Inserta un nuevo registro de auditoría en la tabla `activity_logs` vía HTTP POST.
-   * Invocado por: `StoreController.tsx` cada vez que se ejecuta `addLog()`.
+   * Inserta un registro de bitácora vía settingsModel.
    */
   async insertLog(log: ActivityLog): Promise<void> {
-    if (!isSupabaseConfigured) return;
-    await supabase.from('activity_logs').insert({
-      id: log.id,
-      action: log.action,
-      detail: log.detail,
-      user_id: log.userId,
-      user_name: log.userName,
-      created_at: log.createdAt,
-    });
+    await settingsModel.insertLog(log);
   },
 };

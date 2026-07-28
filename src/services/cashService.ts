@@ -1,37 +1,26 @@
 /**
  * @file cashService.ts
- * @description Capa de Servicio / Acceso a Datos para Sesiones de Caja y Movimientos de Efectivo.
+ * @description Capa de Servicio / Lógica de Negocio para Sesiones de Caja y Movimientos.
  * 
- * RELACIÓN CON EL CONTROLADOR (`src/controllers/CashController.ts`):
- * - `cashService` efectúa peticiones HTTP REST a las tablas `cash_sessions` y `cash_movements`.
- * - `CashController.ts` invoca estas funciones durante el ciclo de vida del turno de caja:
- *    • `CashController.openCash()` ➔ llama a `cashService.openSession(session)`
- *    • `CashController.closeCash()` ➔ llama a `cashService.closeSession(...)`
- *    • `CashController.addCashMovement()` y `logSessionMovement()` ➔ llaman a `cashService.insertMovement(...)`
- * - `StoreController.tsx` ejecuta `cashService.fetchCashData()` al cargar la app para hidratar las sesiones.
+ * REGLA DE ARQUITECTURA:
+ * - `cashService` contiene las reglas de negocio de turnos de caja.
+ * - Consume ÚNICAMENTE el modelo `cashModel` (sin llamadas directas a Supabase).
+ * - Es invocado por `CashController.ts` y `StoreController.tsx`.
  */
 
 import type { CashSession, CashMovement, CashMovementType } from '../models/types';
-import { supabase, isSupabaseConfigured } from '../models/supabase';
+import { cashModel } from '../models/cashModel';
+import { isSupabaseConfigured } from '../models/supabase';
 import { syncService } from './syncService';
 
 export const cashService = {
   /**
-   * Consulta las sesiones de caja y sus movimientos desde Supabase vía HTTP GET.
-   * Asocia cada movimiento a su respectiva sesión de caja.
-   * Invocado por: `StoreController.tsx` durante la carga inicial.
+   * Obtiene y procesa los turnos y movimientos de caja desde cashModel.
    */
   async fetchCashData(): Promise<{ cashSessions: CashSession[]; cashMovements: CashMovement[] }> {
-    if (!isSupabaseConfigured) return { cashSessions: [], cashMovements: [] };
+    const { sessions, movements } = await cashModel.findAllCashData();
 
-    // Ejecuta 2 consultas en paralelo a `cash_sessions` y `cash_movements`
-    const [{ data: cashSessions }, { data: cashMovements }] = await Promise.all([
-      supabase.from('cash_sessions').select('*'),
-      supabase.from('cash_movements').select('*'),
-    ]);
-
-    // Mapeo de movimientos desde snake_case a la interfaz CashMovement
-    const mappedMovements: CashMovement[] = (cashMovements || []).map((m) => ({
+    const mappedMovements: CashMovement[] = movements.map((m) => ({
       id: m.id,
       type: m.type as CashMovementType,
       amount: Number(m.amount),
@@ -43,8 +32,7 @@ export const cashService = {
       createdAt: m.created_at,
     }));
 
-    // Mapeo de sesiones de caja
-    const mappedSessions: CashSession[] = (cashSessions || []).map((cs) => ({
+    const mappedSessions: CashSession[] = sessions.map((cs) => ({
       id: cs.id,
       openingAmount: Number(cs.opening_amount),
       closingAmount: cs.closing_amount !== null ? Number(cs.closing_amount) : null,
@@ -60,55 +48,26 @@ export const cashService = {
   },
 
   /**
-   * Abre una nueva sesión de caja registrando la cabecera en `cash_sessions`
-   * y su primer movimiento de 'apertura' en `cash_movements` mediante peticiones HTTP POST.
-   * Invocado por: `CashController.openCash()`
+   * Abre un nuevo turno de caja e inserta su movimiento inicial vía cashModel.
    */
   async openSession(session: CashSession): Promise<void> {
-    if (!isSupabaseConfigured) return;
-
-    await supabase.from('cash_sessions').insert({
-      id: session.id,
-      opening_amount: session.openingAmount,
-      status: 'abierta',
-      user_id: session.userId || null,
-      user_name: session.userName,
-    });
+    await cashModel.insertSession(session);
 
     const firstMov = session.movements[0];
     if (firstMov) {
-      await supabase.from('cash_movements').insert({
-        id: firstMov.id,
-        session_id: session.id,
-        type: firstMov.type,
-        amount: firstMov.amount,
-        concept: firstMov.concept,
-        user_id: session.userId || null,
-        user_name: session.userName,
-      });
+      await cashModel.insertMovement(firstMov, session.id);
     }
   },
 
   /**
-   * Cierra una sesión de caja activa cambiando su estado a 'cerrada' y registrando el monto final entregado vía HTTP PATCH.
-   * Invocado por: `CashController.closeCash()`
+   * Cierra la sesión activa a través de cashModel.
    */
   async closeSession(sessionId: string, closingAmount: number, closedAt: string): Promise<void> {
-    if (!isSupabaseConfigured) return;
-    await supabase
-      .from('cash_sessions')
-      .update({
-        status: 'cerrada',
-        closing_amount: closingAmount,
-        closed_at: closedAt,
-      })
-      .eq('id', sessionId);
+    await cashModel.closeSession(sessionId, closingAmount, closedAt);
   },
 
   /**
-   * Registra un movimiento de caja (ingreso, egreso, venta, etc.) en `cash_movements` vía HTTP POST.
-   * En caso de desconexión, guarda el movimiento en la cola offline de `syncService`.
-   * Invocado por: `CashController.addCashMovement()`, `CashController.logSessionMovement()`, `CustomerController.addCustomerPayment()`.
+   * Inserta un movimiento de caja vía cashModel o lo agrega a la cola offline.
    */
   async insertMovement(m: CashMovement, activeSessionId?: string | null): Promise<void> {
     if (!isSupabaseConfigured) {
@@ -117,19 +76,9 @@ export const cashService = {
     }
 
     try {
-      await supabase.from('cash_movements').insert({
-        id: m.id,
-        session_id: activeSessionId || null,
-        type: m.type,
-        amount: m.amount,
-        concept: m.concept,
-        reference: m.reference,
-        details: m.details ? JSON.stringify(m.details) : null,
-        user_id: m.userId || null,
-        user_name: m.userName,
-      });
+      await cashModel.insertMovement(m, activeSessionId);
     } catch (err) {
-      console.warn('Supabase cash movement failed, enqueuing for offline sync:', err);
+      console.warn('Cash movement failed, enqueuing for offline sync:', err);
       syncService.addToPendingQueue({ id: m.id, type: 'cash_movement', payload: { ...m, sessionId: activeSessionId } });
     }
   },
