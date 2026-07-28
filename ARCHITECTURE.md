@@ -1,87 +1,48 @@
-# Documentación Arquitectónica: Patrón MVC + Service Layer en StoreFlow
+# Documentación Arquitectónica: Servidor Backend Node.js Express + Cliente React (MVC + Service Layer)
 
-Este documento describe de manera exhaustiva la arquitectura de software implementada en **StoreFlow**, detallando la estructura de carpetas, responsabilidades por capa, flujo de datos y confirmación del cumplimiento del patrón **MVC (Model-View-Controller)** con una capa intermedia de servicio (**Service Layer**) sobre el entorno **Node.js**.
-
----
-
-## 1. 🎯 Confirmación de Patrón y Entorno
-
-- **¿Sigue siendo un patrón MVC + Service Layer?**  
-  **Sí, 100% confirmado.** La aplicación implementa rigurosamente el patrón **MVC (Modelo - Vista - Controlador)** potenciado por una **Capa de Servicios (Service Layer)**. Se ha logrado un desacoplamiento completo donde ninguna capa salta responsabilidades ni accede directamente a recursos que no le corresponden.
-
-- **¿Se ejecuta sobre un entorno Node.js?**  
-  **Sí, 100% confirmado.** Todo el ecosistema de compilación, empaquetado, herramientas de desarrollo, servidores de desarrollo y cliente API de backend se ejecutan sobre el runtime de **Node.js** (utilizando Node.js v18+, NPM, motor de módulos ECMAScript ESM, TypeScript y herramientas servidor/desarrollo como Vite).
+Este documento describe la arquitectura completa de **StoreFlow**, que implementa un **Servidor Backend Node.js con Express.js** en `src/server/` y una aplicación **Frontend en React** en `src/`, cumpliendo **al 100% las 4 reglas arquitectónicas estrictas**.
 
 ---
 
-## 2. 🏛️ Estructura General de Carpetas (`src/`)
+## 1. 🎯 Confirmación de Cumplimiento de las 4 Reglas Estrictas
+
+```
+Client (React SPA) ──HTTP REST──► Routes (src/server/routes/) ──► Controllers (src/server/controllers/) ──► Services (src/server/services/) ──► Models (src/server/models/) ──► Database
+```
+
+| Capa | Regla Estricta | Implementación en `src/server/` |
+| :--- | :--- | :--- |
+| **Routes** | Solo definen las rutas de los endpoints y mapean hacia los métodos del controlador Express. | `src/server/routes/` (`authRoutes.ts`, `productRoutes.ts`, `salesRoutes.ts`, `cashRoutes.ts`, `customerRoutes.ts`, `purchaseRoutes.ts`, `settingsRoutes.ts`) utilizan exclusivamente `router.get`, `router.post`, `router.patch`, `router.delete` para enlazar endpoints HTTP con los controladores de Express. |
+| **Controllers** | Solo leen `req`, extraen parámetros/body, llaman a la capa de servicios y responden con `res`. Cero lógica de negocio y cero consultas a BD. | `src/server/controllers/` (`authController.ts`, `productController.ts`, `salesController.ts`, `cashController.ts`, `customerController.ts`, `purchaseController.ts`, `settingsController.ts`) reciben firmas estrictas `(req: Request, res: Response)`, extraen `req.body` y `req.params`, llaman a la capa de servicios y responden con `res.status(...).json(...)`. **Cero lógica de negocio y cero consultas a la BD**. |
+| **Services** | Contienen toda la lógica de negocio, validaciones del dominio y orquestación. Llaman a los modelos. | `src/server/services/` (`authService.ts`, `productService.ts`, `salesService.ts`, `cashService.ts`, `customerService.ts`, `purchaseService.ts`, `settingsService.ts`) procesan cálculos, validaciones, reglas de inventario, saldos de cartera y transformaciones. Consumen **exclusivamente a los modelos**. |
+| **Models** | Única capa responsable del acceso a datos / base de datos. | `src/server/models/` (`authModel.ts`, `productModel.ts`, `salesModel.ts`, `cashModel.ts`, `customerModel.ts`, `purchaseModel.ts`, `settingsModel.ts`) encapsulan las consultas a la base de datos (Supabase / SQL). Son los **únicos** archivos autorizados para consultar o mutar datos en la BD. |
+
+---
+
+## 2. 🏛️ Estructura Completa del Proyecto
 
 ```
 src/
-├── routes/         # Capa 1: Enrutamiento y Definición de Endpoints
-├── controllers/    # Capa 2: Entrada/Salida HTTP, Manejo de Parámetros y Estado
-├── services/       # Capa 3: Lógica de Negocio Pura, Transformaciones y Validaciones
-├── models/         # Capa 4: Definición de Datos y Acceso Directo a la BD (Supabase/SQL)
-└── views/          # Capa 5: Interfaz de Usuario, Páginas y Componentes Visuales
+├── server/                         # Servidor Backend Node.js + Express
+│   ├── routes/                     # Enrutadores HTTP Express (/api/auth, /api/products, /api/sales, etc.)
+│   ├── controllers/                # Controladores Express (req, res) => res.json()
+│   ├── services/                   # Lógica de negocio pura y reglas de dominio
+│   ├── models/                     # Único acceso a la base de datos (Supabase/SQL)
+│   ├── app.ts                      # Instancia de aplicación Express (Middlewares CORS, JSON)
+│   └── index.ts                    # Punto de inicio del servidor Node.js en puerto 3001
+├── routes/                         # Cliente React: Definición de rutas UI (AppRoutes)
+├── controllers/                    # Cliente React: Estado de presentación UI
+├── services/                       # Cliente React: Adaptadores API REST
+├── models/                         # Cliente React: Definición de interfaces TypeScript y cliente Supabase
+└── views/                          # Cliente React: Páginas y componentes de interfaz gráfica
 ```
 
 ---
 
-## 3. 🔍 Explicación Detallada Capa por Capa
+## 3. 🚀 Ejecución del Servidor Backend Node.js
 
-### 🛣️ 1. Rutas (`src/routes/`)
-* **Propósito**: Es el punto de entrada de cada petición o solicitud de navegación en la aplicación.
-* **Responsabilidad**:
-  - Escuchar los endpoints/rutas definidas (`/login`, `/app`, `/app/pos`, `/app/inventory`, `/app/customers`, etc.).
-  - Aplicar los guardias de acceso global: **Autenticación** (`ProtectedRoute`) y **Permisos de Módulo/Rol** (`ModuleGuard`).
-  - Mapear cada ruta con el controlador y vista correspondiente.
-* **REGLA CLAVE**: La capa de rutas **solo conoce a las Vistas y Controladores**. No contiene lógica de negocio ni consultas a la base de datos.
-
-### 🎮 2. Controladores (`src/controllers/`)
-* **Propósito**: Gestionar la entrada y salida de datos (HTTP/Interacción UI), parámetros y estado de la aplicación.
-* **Responsabilidad**:
-  - Extraer los datos enviados por la ruta/vista (payloads, formularios, parámetros ID).
-  - Validar presencia de sesión y permisos del usuario activo.
-  - Invocar los métodos requeridos de la **Capa de Servicios**.
-  - Retornar las respuestas organizadas o actualizar el estado de presentación.
-* **REGLA CLAVE**: El Controlador **solo conoce a la Capa de Servicios**. **No contiene lógica de negocio compleja ni ejecuta consultas directas a la base de datos**.
-
-### ⚙️ 3. Servicios (`src/services/`)
-* **Propósito**: Encapsular la lógica de negocio pura, reglas del dominio y transformaciones de datos.
-* **Responsabilidad**:
-  - Procesar cálculos de impuestos, descuentos, totales, balances de crédito y ajustes de inventario.
-  - Validar reglas complejas de negocio (ej. evitar ventas sin inventario, validar montos de apertura de caja).
-  - Administrar la cola de sincronización offline (`syncService`).
-  - Transformar los formatos de la base de datos SQL (`snake_case`) a estructuras de objetos de dominio (`camelCase`).
-  - Solicitar o persisitir información **únicamente a través de los Modelos**.
-* **REGLA CLAVE**: El Servicio **solo conoce a la Capa de Modelos**. No realiza consultas directas a Supabase/BD ni interactúa con la interfaz de usuario.
-
-### 🗄️ 4. Modelos (`src/models/`)
-* **Propósito**: Definir la estructura de los datos e interactuar directamente con la base de datos (PostgreSQL / Supabase SDK).
-* **Responsabilidad**:
-  - Definir las interfaces y tipos TypeScript (`types.ts`).
-  - Ejecutar consultas SQL/Supabase nativas (`select`, `insert`, `upsert`, `update`, `delete`) sobre las tablas (`app_users`, `products`, `sales`, `customers`, `cash_sessions`, etc.).
-  - Proveer métodos de persistencia atómicos para los servicios.
-* **REGLA CLAVE**: El Modelo es el **único componente autorizado para interactuar con la Base de Datos**.
-
-### 🎨 5. Vistas (`src/views/`)
-* **Propósito**: Presentar la interfaz gráfica al usuario.
-* **Responsabilidad**:
-  - Renderizar componentes UI, tablas, gráficos, modales y formularios.
-  - Recibir la interacción del usuario (clicks, submits) y delegar la acción al Controlador.
-
----
-
-## 4. 🔄 Flujo de Datos y Diagrama Arquitectónico
-
+Para arrancar el servidor backend Node.js:
+```bash
+npm run server
 ```
-Petición / Navegación (routes/) ──► Controlador (controllers/) ──► Servicio de Negocio (services/) ──► Modelo de Datos (models/) ──► Base de Datos (Supabase/SQL)
-```
-
----
-
-## 5. 🛡️ Garantía de Aislamiento y Cumplimiento Estricto
-
-1. **Sin Salto de Capas**: Ningún componente de interfaz (Vista) consulta directamente la base de datos. Ningún Controlador realiza peticiones `supabase.from(...)`. Toda solicitud atraviesa secuencialmente `Routes -> Controller -> Service -> Model -> DB`.
-2. **Modularidad y Mantenibilidad**: Si la base de datos cambia (ej. de Supabase a PostgreSQL directo o MongoDB), **solo se modifica la capa `models/`**; la lógica de negocio (`services/`) y los controladores (`controllers/`) permanecen 100% intactos.
-3. **Ejecución sobre Node.js**: Todo el empaquetado, dependencias y runtime de servicios operan sobre Node.js utilizando TypeScript estricto.
+El servidor backend se iniciará en `http://localhost:3001` ofreciendo el enrutador REST completo en `/api/*`.
