@@ -2,12 +2,13 @@
 
 **StoreFlow** es una plataforma web moderna, modular y de alto rendimiento de Punto de Venta (POS), control de inventarios, gestión de caja y auditoría en tiempo real diseñada para comercios minoristas y de consumo masivo (minimarkets, tiendas de abarrotes, boutiques, ferreterías).
 
-Ofrece una **arquitectura desacoplada en 3 capas (MVC + Service Layer)** y un **Motor de Sincronización Resiliente Offline-First con Health Check**, garantizando que el negocio siga vendiendo sin interrupción aunque se corte el internet o falle el servidor en la nube.
+Ofrece una **arquitectura desacoplada en 4 capas (MVC + Service Layer)** respaldada por un **Servidor Backend Node.js con Express.js** y un **Motor de Sincronización Resiliente Offline-First con Health Check**, garantizando que el negocio siga vendiendo sin interrupción aunque se corte el internet o falle el servidor en la nube.
 
 ---
 
 ## 📄 Documentación Técnica y Ejecutiva
 Para una revisión completa de la arquitectura, esquemas de base de datos PostgreSQL, planteamiento del problema y hoja de ruta de escalabilidad:
+- 📘 **Documentación de Arquitectura MVC + Service Layer**: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - 📘 **Documento Técnico en PDF**: [`Documento_Tecnico_StoreFlow.pdf`](Documento_Tecnico_StoreFlow.pdf)
 
 ---
@@ -46,8 +47,9 @@ Para una revisión completa de la arquitectura, esquemas de base de datos Postgr
 
 ## 🛠️ Stack Tecnológico
 
-* **Core Framework**: [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
-* **Compilador & Bundler**: [Vite](https://vitejs.dev/)
+* **Backend Node.js Server**: [Node.js](https://nodejs.org/) + [Express.js](https://expressjs.com/) (`src/server/`)
+* **Core Frontend**: [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) (`src/`)
+* **Compilador & Bundler**: [Vite](https://vitejs.dev/) + [tsx](https://github.com/privatenumber/tsx)
 * **Base de Datos & Backend**: [Supabase](https://supabase.com/) (PostgreSQL)
 * **Resiliencia & Sync Engine**: LocalStorage Pending Queue + Health Check Heartbeat
 * **Estilos & UI**: Vanilla CSS + [Tailwind CSS](https://tailwindcss.com/)
@@ -60,38 +62,21 @@ Para una revisión completa de la arquitectura, esquemas de base de datos Postgr
 
 ```text
 StoreFlow/
-├── supabase/
-│   └── schema.sql               # Script DDL de tablas relacionales PostgreSQL
 ├── src/
-│   ├── models/                  # MODEL — Tipado estricto y cliente Supabase
-│   │   ├── types.ts             # Interfaces TypeScript de entidades
-│   │   ├── seed.ts              # Semilla de datos de demostración
-│   │   └── supabase.ts          # Cliente singleton de Supabase
-│   ├── controllers/             # CONTROLLER — Estado y Reglas de Negocio
-│   │   ├── AuthController.ts     # Sesiones y permisos RBAC
-│   │   ├── CashController.ts     # Turnos y movimientos de caja
-│   │   ├── CustomerController.ts # Clientes y cartera a crédito
-│   │   ├── ProductController.ts  # Catálogo, categorías y stock
-│   │   ├── PurchaseController.ts # Proveedores e ingreso de compras
-│   │   ├── SalesController.ts    # Transacciones POS y anulaciones
-│   │   ├── SettingsController.ts # Parámetros globales y temas UI
-│   │   ├── StoreController.tsx  # Orquestador del StoreProvider y Auto-Sync Heartbeat
-│   │   └── permissions.ts       # Matriz de permisos por rol
-│   ├── services/                # SERVICE LAYER — Abstracción I/O y Resiliencia
-│   │   ├── authService.ts        # I/O usuarios
-│   │   ├── cashService.ts        # I/O caja
-│   │   ├── customerService.ts    # I/O clientes
-│   │   ├── productService.ts    # I/O productos y stock
-│   │   ├── purchaseService.ts    # I/O compras
-│   │   ├── salesService.ts       # I/O ventas
-│   │   ├── settingsService.ts    # I/O configuraciones y logs
-│   │   └── syncService.ts        # Motor de cola offline y Health Check
-│   ├── views/                   # VIEW — Presentación pura (UI/UX)
-│   │   ├── pages/               # POSPage, CashPage, ProductsPage, SettingsPage...
-│   │   └── components/          # AppLayout, Topbar, Sidebar, UI Primitives
-│   └── lib/
-│       └── utils.ts             # Generador de SKU, IDs secuenciales, formateadores
-├── Documento_Tecnico_StoreFlow.pdf # Documento técnico completo en PDF
+│   ├── server/                  # BACKEND NODE.JS (Express Server)
+│   │   ├── routes/              # 1. Routes (Express HTTP Routers)
+│   │   ├── controllers/         # 2. Controllers (req: Request, res: Response) => res.json()
+│   │   ├── services/            # 3. Services (Lógica de Negocio y Reglas del Dominio)
+│   │   ├── models/              # 4. Models (Acceso exclusivo a Base de Datos / Supabase SQL)
+│   │   ├── app.ts               # Instancia Express con CORS y JSON
+│   │   └── index.ts             # Punto de entrada servidor Node.js (Puerto 3001)
+│   ├── routes/                  # CLIENTE REACT — Definición de Rutas UI (AppRoutes)
+│   ├── controllers/             # CLIENTE REACT — Estado de presentación UI
+│   ├── services/                # CLIENTE REACT — Adaptadores API REST
+│   ├── models/                  # CLIENTE REACT — Interfaces y Cliente Supabase
+│   └── views/                   # CLIENTE REACT — Componentes y Páginas (POSPage, CashPage...)
+├── ARCHITECTURE.md              # Documentación técnica detallada de la arquitectura por capas
+├── Documento_Tecnico_StoreFlow.pdf
 ├── package.json
 └── vite.config.ts
 ```
@@ -127,15 +112,13 @@ StoreFlow/
    VITE_SUPABASE_ANON_KEY=tu-anon-key-aqui
    ```
 
-4. **Inicializar la Base de Datos en Supabase (Opcional)**:
-   * En tu panel de Supabase, entra al **SQL Editor**.
-   * Copia el contenido de [`supabase/schema.sql`](supabase/schema.sql) y ejecútalo.
-
-5. **Iniciar Servidor de Desarrollo**:
+4. **Ejecutar Backend Node.js y Frontend React al mismo tiempo (1 Solo Comando)**:
    ```bash
    npm run dev
    ```
-   Abre en tu navegador `http://localhost:5173`.
+   Este comando arrancará en paralelo:
+   - 🚀 **Backend Node.js Express**: `http://localhost:3001`
+   - 💻 **Frontend React (Vite)**: `http://localhost:5173`
 
 ---
 
