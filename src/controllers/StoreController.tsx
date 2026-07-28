@@ -1,3 +1,34 @@
+/**
+ * @file StoreController.tsx
+ * @description Controlador Principal y Proveedor de Contexto Global de React (`StoreProvider` y `useStore`).
+ * 
+ * ARQUITECTURA DE INTEGRACIÓN SERVICIOS ↔ CONTROLADORES:
+ * 1. Inicialización e Hidratación de Datos:
+ *    En el `useEffect` inicial (líneas 122-172), `StoreController` llama en paralelo a todos los servicios de lectura:
+ *    • `authService.fetchUsers()`
+ *    • `productService.fetchProductsData()`
+ *    • `customerService.fetchCustomers()`
+ *    • `purchaseService.fetchPurchasesData()`
+ *    • `salesService.fetchSalesData()`
+ *    • `cashService.fetchCashData()`
+ *    • `settingsService.fetchSettingsAndLogs()`
+ *    Y asigna el resultado a la base de datos en memoria (`db`).
+ * 
+ * 2. Orquestación de Controladores de Dominio:
+ *    Instancia y conecta todos los Hooks controladores especificos:
+ *    • `useAuthController`
+ *    • `useCashController`
+ *    • `useProductController`
+ *    • `useCustomerController`
+ *    • `usePurchaseController`
+ *    • `useSalesController`
+ *    • `useSettingsController`
+ * 
+ * 3. Motor de Sincronización Automática (AutoSync):
+ *    Un intervalo periódico (cada 15 segundos) invoca `syncService.processPendingQueue()` para enviar
+ *    a Supabase cualquier transacción creada durante desconexión a internet.
+ */
+
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AppDatabase, ActivityLog, User } from '../models/types';
 import { seedDatabase } from '../models/seed';
@@ -5,6 +36,7 @@ import { generateId } from '../lib/utils';
 import { isSupabaseConfigured } from '../models/supabase';
 import type { StoreContextValue } from './types';
 
+// Importación de la Capa de Servicios (Data Access / API REST)
 import { authService } from '../services/authService';
 import { cashService } from '../services/cashService';
 import { productService } from '../services/productService';
@@ -14,6 +46,7 @@ import { salesService } from '../services/salesService';
 import { settingsService } from '../services/settingsService';
 import { syncService } from '../services/syncService';
 
+// Importación de la Capa de Controladores de Dominio (State & Business Logic)
 import { useAuthController } from './AuthController';
 import { useCashController } from './CashController';
 import { useProductController } from './ProductController';
@@ -24,6 +57,9 @@ import { useSettingsController } from './SettingsController';
 
 const STORAGE_KEY = 'storeflow_local_db_v2';
 
+/**
+ * Carga el estado de la base de datos desde `localStorage` en caso de no contar con conexión a Supabase.
+ */
 function loadDbFromStorage(): AppDatabase {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -33,18 +69,28 @@ function loadDbFromStorage(): AppDatabase {
   }
 }
 
+/**
+ * Guarda la base de datos en `localStorage`.
+ */
 function saveDbToStorage(db: AppDatabase) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 }
 
+// Creación del contexto global de React
 const StoreContext = createContext<StoreContextValue | null>(null);
 
+/**
+ * Proveedor principal de la aplicación que envuelve a los componentes UI y provee el estado global.
+ */
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<AppDatabase>(loadDbFromStorage);
   const [isLoadingDb, setIsLoadingDb] = useState<boolean>(isSupabaseConfigured);
   const currentUserRef = useRef<User | null>(null);
 
-  // Activity Logging
+  /**
+   * Registrador global de eventos y bitácora de auditoría.
+   * Agrega la entrada a `db.logs` en memoria y la persiste en el backend mediante `settingsService.insertLog(log)`.
+   */
   const addLog = useCallback(
     (action: string, detail: string) => {
       const u = currentUserRef.current;
@@ -62,7 +108,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // 1. Domain Controller: Auth
+  // 1. Controlador de Dominio: Autenticación y Usuarios
   const {
     currentUser,
     login,
@@ -73,7 +119,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   currentUserRef.current = currentUser;
 
-  // 2. Domain Controller: Cash
+  // 2. Controlador de Dominio: Caja y Arqueos
   const {
     activeCashSession,
     logSessionMovement,
@@ -82,7 +128,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addCashMovement,
   } = useCashController(db, setDb, currentUser, addLog);
 
-  // 3. Domain Controller: Products & Stock
+  // 3. Controlador de Dominio: Productos e Inventario
   const {
     upsertCategory,
     upsertProduct,
@@ -90,14 +136,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     adjustStock,
   } = useProductController(setDb, currentUser, logSessionMovement, addLog);
 
-  // 4. Domain Controller: Customers
+  // 4. Controlador de Dominio: Clientes y Cartera de Crédito
   const {
     upsertCustomer,
     deleteCustomer,
     addCustomerPayment,
   } = useCustomerController(db, setDb, currentUser, activeCashSession, logSessionMovement, addLog);
 
-  // 5. Domain Controller: Suppliers & Purchases
+  // 5. Controlador de Dominio: Proveedores y Compras
   const {
     upsertSupplier,
     deleteSupplier,
@@ -105,20 +151,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     receivePurchase,
   } = usePurchaseController(db, setDb, logSessionMovement, addLog);
 
-  // 6. Domain Controller: Sales
+  // 6. Controlador de Dominio: Ventas y Facturación
   const {
     addSale,
     voidSale,
   } = useSalesController(db, setDb, addLog);
 
-  // 7. Domain Controller: Settings & Theme
+  // 7. Controlador de Dominio: Ajustes y Tema Visual
   const {
     updateSettings,
     setTheme,
     resetData,
   } = useSettingsController(db, setDb, addLog);
 
-  // Initial Supabase Data Hydration via Services
+  /**
+   * Hidratación Inicial de Datos desde la API de Supabase vía Servicios.
+   * Ejecuta peticiones GET concurrentes al arrancar la aplicación.
+   */
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
@@ -146,6 +195,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         if (!isMounted) return;
 
+        // Carga los datos leídos de la API o mantiene la semilla si están vacíos
         setDb({
           users: users.length > 0 ? users : seedDatabase.users,
           categories: categories.length > 0 ? categories : seedDatabase.categories,
@@ -171,14 +221,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => { isMounted = false; };
   }, []);
 
-  // Save to LocalStorage when Supabase is not configured
+  /**
+   * Guarda automáticamente los cambios en LocalStorage en modo Standalone (sin Supabase).
+   */
   useEffect(() => {
     if (!isSupabaseConfigured) {
       saveDbToStorage(db);
     }
   }, [db]);
 
-  // Offline Queue Heartbeat & Auto-Sync Engine
+  /**
+   * Motor de Auto-Sincronización de Transacciones Offline.
+   * Monitorea la red y procesa la cola de `syncService` cada 15 segundos.
+   */
   useEffect(() => {
     let isProcessing = false;
 
@@ -188,7 +243,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try {
         const queue = syncService.getPendingQueue();
         if (queue.length > 0) {
-          const { success, failed } = await syncService.processPendingQueue();
+          const { success } = await syncService.processPendingQueue();
           if (success > 0) {
             console.log(`[AutoSync] Sincronizados con éxito ${success} registros pendientes con Supabase.`);
           }
@@ -211,6 +266,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Consolidación de todos los estados y funciones de los controladores en el objeto de contexto
   const value: StoreContextValue = {
     db,
     currentUser,
@@ -246,6 +302,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 
+/**
+ * Hook de consumidor para acceder fácilmente al contexto `StoreContext` desde cualquier componente React.
+ */
 export function useStore() {
   const ctx = useContext(StoreContext);
   if (!ctx) throw new Error('useStore must be used within StoreProvider');

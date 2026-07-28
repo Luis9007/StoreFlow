@@ -1,9 +1,22 @@
+/**
+ * @file seed.ts
+ * @description Datos Semilla / Iniciales de Prueba para la Base de Datos Local.
+ * 
+ * RELACIÓN CON OTROS MÓDULOS:
+ * - Utilizado por `StoreController.tsx` y `loadDbFromStorage` cuando no hay datos en la API de Supabase
+ *   o cuando la aplicación se ejecuta en modo standalone (sin backend en la nube).
+ * - Proveído por `SettingsController.resetData()` para restaurar el sistema a su estado inicial.
+ */
+
 import type { AppDatabase, Product, Sale, SaleItem, CashSession, Purchase } from './types';
 import { generateId } from '../lib/utils';
 
 const now = new Date();
 const iso = (d: Date) => d.toISOString();
 
+/**
+ * Función auxiliar para generar fechas relativas hacia atrás en días.
+ */
 function daysBack(n: number, hour = 10, min = 0): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -11,6 +24,7 @@ function daysBack(n: number, hour = 10, min = 0): string {
   return iso(d);
 }
 
+/** Categorías iniciales de productos */
 const categories = [
   { id: 'cat_bebidas', name: 'Bebidas', color: '#0ea5e9', icon: 'CupSoda' },
   { id: 'cat_lacteos', name: 'Lácteos', color: '#14b8a6', icon: 'Milk' },
@@ -20,6 +34,7 @@ const categories = [
   { id: 'cat_cuidado', name: 'Cuidado Personal', color: '#ec4899', icon: 'HeartPulse' },
 ];
 
+/** Marcas comerciales iniciales */
 const brands = [
   { id: 'br_coca', name: 'Coca-Cola' },
   { id: 'br_pepsi', name: 'Pepsi' },
@@ -38,6 +53,7 @@ type SeedProduct = Pick<
   'sku' | 'barcode' | 'name' | 'description' | 'categoryId' | 'brandId' | 'cost' | 'price' | 'stock' | 'minStock' | 'unit' | 'favorite'
 >;
 
+/** Productos del catálogo inicial */
 const productSeeds: SeedProduct[] = [
   { sku: 'COCA-600', barcode: '7501057530015', name: 'Coca-Cola 600ml', description: 'Refresco de cola 600ml', categoryId: 'cat_bebidas', brandId: 'br_coca', cost: 2800, price: 4500, stock: 120, minStock: 24, unit: 'pza', favorite: true },
   { sku: 'COCA-2L', barcode: '7501057530022', name: 'Coca-Cola 2L', description: 'Refresco de cola 2 litros', categoryId: 'cat_bebidas', brandId: 'br_coca', cost: 5800, price: 8500, stock: 60, minStock: 12, unit: 'pza', favorite: true },
@@ -64,6 +80,7 @@ const productSeeds: SeedProduct[] = [
   { sku: 'PAPEL-HIG', barcode: '7501057530237', name: 'Papel Higiénico Familia', description: 'Paquete 4 rollos', categoryId: 'cat_limpieza', brandId: 'br_p&g', cost: 5500, price: 9200, stock: 32, minStock: 10, unit: 'pza', favorite: false },
 ];
 
+/** Arreglo final de productos instanciados con ID */
 const products: Product[] = productSeeds.map((p, i) => ({
   ...p,
   id: `prod_${String(i + 1).padStart(3, '0')}`,
@@ -71,6 +88,7 @@ const products: Product[] = productSeeds.map((p, i) => ({
   createdAt: daysBack(30 - i),
 }));
 
+/** Clientes iniciales */
 const customers = [
   { id: 'cus_001', name: 'María González', document: 'GOAM850412', phone: '5512345678', email: 'maria.g@email.com', address: 'Calle Reforma 123, CDMX', balance: 0, notes: 'Cliente frecuente', createdAt: daysBack(20) },
   { id: 'cus_002', name: 'Juan Pérez', document: 'PEMJ900315', phone: '5598765432', email: 'juan.p@email.com', address: 'Av. Insurgentes 456, CDMX', balance: 120, notes: 'Crédito pendiente', createdAt: daysBack(15) },
@@ -79,6 +97,7 @@ const customers = [
   { id: 'cus_005', name: 'Laura Sánchez', document: 'SACL950714', phone: '5566778899', email: 'laura.s@email.com', address: 'Polanco, CDMX', balance: 0, notes: '', createdAt: daysBack(2) },
 ];
 
+/** Proveedores iniciales */
 const suppliers = [
   { id: 'sup_001', name: 'Distribuidora del Centro', contact: 'Roberto Díaz', phone: '5511223344', email: 'ventas@distcentro.com', address: 'Av. Industrial 100, CDMX', taxId: 'DC850101AB1', balance: 0, createdAt: daysBack(25) },
   { id: 'sup_002', name: 'Coca-Cola FEMSA', contact: 'Patricia Luna', phone: '5533445566', email: 'pedidos@cocafemsa.com', address: 'Av. Tláhuac 200, CDMX', taxId: 'CF900202XY2', balance: 0, createdAt: daysBack(25) },
@@ -86,6 +105,7 @@ const suppliers = [
   { id: 'sup_004', name: 'Nestlé México', contact: 'Sofía Vega', phone: '5577889900', email: 'contacto@nestle.mx', address: 'Av. Cuauhtémoc 800, CDMX', taxId: 'NM900404EF4', balance: 0, createdAt: daysBack(18) },
 ];
 
+/** Función constructora de ventas sintéticas para demostración */
 function buildSale(daysBackN: number, hour: number, items: Array<{ product: Product; qty: number }>, paymentMethod: Sale['paymentMethod'], customerIdx: number | null, userId: string, userName: string, seq: number): Sale {
   const saleItems: SaleItem[] = items.map(({ product, qty }) => ({
     productId: product.id,
@@ -140,6 +160,7 @@ const sales: Sale[] = [
   buildSale(0, 13, [{ product: products[10], qty: 1 }, { product: products[9], qty: 1 }, { product: products[11], qty: 1 }], 'efectivo', null, 'user_cajero', 'Carlos Vendedor', saleSeq++),
 ];
 
+/** Compras iniciales de prueba */
 const purchases: Purchase[] = [
   {
     id: generateId('pur'),
@@ -189,6 +210,7 @@ const purchases: Purchase[] = [
   },
 ];
 
+/** Sesiones de caja registradora iniciales */
 const cashSessions: CashSession[] = [
   {
     id: generateId('cash'),
@@ -208,6 +230,7 @@ const cashSessions: CashSession[] = [
   },
 ];
 
+/** Configuración por defecto de la empresa */
 const settings = {
   name: 'Supermercado StoreFlow',
   legalName: 'StoreFlow Colombia S.A.S.',
@@ -222,11 +245,13 @@ const settings = {
   theme: 'light' as const,
 };
 
+/** Usuarios de demostración */
 const users = [
   { id: 'user_super', name: 'Sofía Supervisor', email: 'supervisor@storeflow.com', password: 'super123', role: 'supervisor' as const, active: true, createdAt: daysBack(28) },
   { id: 'user_cajero', name: 'Carlos Vendedor', email: 'cajero@storeflow.com', password: 'cajero123', role: 'cajero' as const, active: true, createdAt: daysBack(25) },
 ];
 
+/** Exportación del objeto completo de la base de datos de semilla */
 export const seedDatabase: AppDatabase = {
   users,
   categories,

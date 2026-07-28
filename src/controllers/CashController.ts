@@ -1,19 +1,41 @@
+/**
+ * @file CashController.ts
+ * @description Controlador Hook de React para la apertura, cierre y gestión de movimientos de caja.
+ * 
+ * RELACIÓN CON EL SERVICIO (`src/services/cashService.ts`):
+ * - Maneja el estado en memoria de las sesiones de caja (`activeCashSession`) y sus movimientos financieros.
+ * - Sincroniza las operaciones con el servidor remoto invocando los métodos de `cashService`:
+ *    • `openCash()` ➔ `cashService.openSession(session)`
+ *    • `closeCash()` ➔ `cashService.closeSession(...)`
+ *    • `addCashMovement()` y `logSessionMovement()` ➔ `cashService.insertMovement(...)`
+ */
+
 import { useMemo, useCallback } from 'react';
 import type { AppDatabase, User, CashSession, CashMovement, CashMovementType } from '../models/types';
 import { generateId } from '../lib/utils';
 import { cashService } from '../services/cashService';
 
+/**
+ * Custom Hook que administra la caja registradora, turnos y movimientos de efectivo.
+ */
 export function useCashController(
   db: AppDatabase,
   setDb: React.Dispatch<React.SetStateAction<AppDatabase>>,
   currentUser: User | null,
   addLog: (action: string, detail: string) => void
 ) {
+  /**
+   * Obtiene la sesión de caja actualmente abierta (si existe).
+   */
   const activeCashSession = useMemo(
     () => (db.cashSessions || []).find((cs) => cs.status === 'abierta') ?? null,
     [db.cashSessions]
   );
 
+  /**
+   * Función utilitaria para registrar movimientos automáticos del sistema o de la sesión (ej. ventas, nuevos clientes).
+   * Inserta el movimiento en la caja abierta y lo sincroniza en Supabase vía `cashService.insertMovement(...)`.
+   */
   const logSessionMovement = useCallback(
     (
       type: CashMovementType,
@@ -45,11 +67,19 @@ export function useCashController(
         return { ...prev, cashSessions };
       });
 
+      // Llama a la API a través del servicio
       cashService.insertMovement(movement, activeCashSession?.id).catch(console.error);
     },
     [currentUser, activeCashSession, setDb]
   );
 
+  /**
+   * Abre un nuevo turno de caja registradora.
+   * 1. Valida que no exista ya una caja abierta.
+   * 2. Crea un objeto `CashSession` con monto base inicial y estado 'abierta'.
+   * 3. Registra en la bitácora (`addLog`).
+   * 4. Persiste en el backend llamando a `cashService.openSession(session)`.
+   */
   const openCash = useCallback(
     (amount: number) => {
       const sessionId = generateId('cash');
@@ -88,6 +118,12 @@ export function useCashController(
     [currentUser, setDb, addLog]
   );
 
+  /**
+   * Cierra el turno de caja activa.
+   * 1. Cambia el estado a 'cerrada' y guarda el monto en arqueo entregado.
+   * 2. Escribe en la bitácora (`addLog`).
+   * 3. Envía la actualización a la API vía `cashService.closeSession(...)`.
+   */
   const closeCash = useCallback(
     (amount: number) => {
       const nowIso = new Date().toISOString();
@@ -124,6 +160,10 @@ export function useCashController(
     [currentUser, activeCashSession, setDb, addLog]
   );
 
+  /**
+   * Registra un ingreso o egreso manual en la caja registradora.
+   * Invocado desde la página de Caja (`CashPage.tsx`).
+   */
   const addCashMovement = useCallback(
     (m: Omit<CashMovement, 'id' | 'createdAt' | 'userId' | 'userName' | 'reference'>) => {
       const movId = generateId('mov');

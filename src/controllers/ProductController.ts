@@ -1,8 +1,23 @@
+/**
+ * @file ProductController.ts
+ * @description Controlador Hook de React para la gestión de productos, categorías y ajustes de inventario.
+ * 
+ * RELACIÓN CON EL SERVICIO (`src/services/productService.ts`):
+ * - Este controlador maneja la actualización del estado local de React (`setDb`), auditoría de bitácora (`addLog`)
+ *   y registros de movimientos de sesión (`logSessionMovement`).
+ * - Delega la persistencia asíncrona en la base de datos remota invocando los métodos del servicio `productService`:
+ *    • `upsertCategory` ➔ `productService.upsertCategory(c)`
+ *    • `upsertProduct` ➔ `productService.upsertProduct(p)`
+ *    • `deleteProduct` ➔ `productService.deleteProduct(id)`
+ *    • `adjustStock` ➔ `productService.updateStock(productId, newStock)` e `productService.insertAdjustment(...)`
+ */
+
 import { useCallback } from 'react';
 import type { AppDatabase, User, Product, Category, InventoryAdjustment, CashMovementType } from '../models/types';
 import { generateId } from '../lib/utils';
 import { productService } from '../services/productService';
 
+// Firma de función para registrar movimientos financieros o de inventario en la sesión de caja activa
 type LogMovementFn = (
   type: CashMovementType,
   amount: number,
@@ -11,12 +26,21 @@ type LogMovementFn = (
   details?: Record<string, any>
 ) => void;
 
+/**
+ * Custom Hook que encapsula toda la lógica de negocio y modificaciones sobre productos e inventario.
+ */
 export function useProductController(
   setDb: React.Dispatch<React.SetStateAction<AppDatabase>>,
   currentUser: User | null,
   logSessionMovement: LogMovementFn,
   addLog: (action: string, detail: string) => void
 ) {
+  /**
+   * Agrega o actualiza una categoría.
+   * 1. Actualiza el estado local `setDb` (React).
+   * 2. Registra la acción en la bitácora de auditoría (`addLog`).
+   * 3. Delega la sincronización con la API REST a `productService.upsertCategory(c)`.
+   */
   const upsertCategory = useCallback(
     (c: Category) => {
       let isNew = false;
@@ -32,6 +56,14 @@ export function useProductController(
     },
     [setDb, addLog]
   );
+
+  /**
+   * Agrega o actualiza un producto en el catálogo.
+   * 1. Actualiza el estado de productos en React (`setDb`).
+   * 2. Si es un producto nuevo, genera un movimiento de sesión de caja (`logSessionMovement`).
+   * 3. Agrega entrada a la bitácora (`addLog`).
+   * 4. Llama a la API REST via `productService.upsertProduct(p)`.
+   */
   const upsertProduct = useCallback(
     (p: Product) => {
       let isNew = false;
@@ -58,6 +90,12 @@ export function useProductController(
     [setDb, logSessionMovement, addLog]
   );
 
+  /**
+   * Elimina un producto por su ID.
+   * 1. Filtra y remueve el producto del estado local `setDb`.
+   * 2. Registra la eliminación en la bitácora (`addLog`).
+   * 3. Envía la solicitud DELETE a la API REST via `productService.deleteProduct(id)`.
+   */
   const deleteProduct = useCallback(
     (id: string) => {
       setDb((prev) => ({ ...prev, products: prev.products.filter((p) => p.id !== id) }));
@@ -67,6 +105,14 @@ export function useProductController(
     [setDb, addLog]
   );
 
+  /**
+   * Ajusta manualmente el stock de un producto (entrada, salida o ajuste directo).
+   * 1. Modifica la cantidad de stock en el producto y crea un nuevo objeto `InventoryAdjustment`.
+   * 2. Registra el movimiento en la caja activa y en la bitácora general.
+   * 3. Llama a dos métodos de `productService`:
+   *    - `productService.updateStock(productId, newStock)` (petición PATCH HTTP)
+   *    - `productService.insertAdjustment(...)` (petición POST HTTP)
+   */
   const adjustStock = useCallback(
     (productId: string, newStock: number, reason: string, type: 'entrada' | 'salida' | 'ajuste') => {
       const nowIso = new Date().toISOString();
@@ -107,6 +153,7 @@ export function useProductController(
 
       addLog('Ajuste de Inventario', `Ajuste (${type.toUpperCase()}) en "${prodName}": stock previo ${prevStock} -> nuevo stock ${newStock}. Motivo: ${reason}`);
 
+      // Persistencia en Supabase a través del servicio productService
       productService.updateStock(productId, newStock).catch(console.error);
       productService
         .insertAdjustment({
@@ -123,7 +170,7 @@ export function useProductController(
         })
         .catch(console.error);
     },
-    [currentUser, setDb, logSessionMovement]
+    [currentUser, setDb, logSessionMovement, addLog]
   );
 
   return {

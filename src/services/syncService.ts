@@ -1,5 +1,19 @@
+/**
+ * @file syncService.ts
+ * @description Capa de Servicio para la Cola de Sincronización Offline y Diagnóstico de Red.
+ * 
+ * RELACIÓN CON LOS CONTROLADORES:
+ * - Cuando una petición de inserción/actualización falla en los servicios primarios (`salesService`, `customerService`, `cashService`),
+ *   estos agregan la transacción a la cola con `syncService.addToPendingQueue()`.
+ * - `StoreController.tsx` ejecuta un temporizador en segundo plano (Heartbeat cada 15 segundos y al detectar evento 'online')
+ *   que llama a `syncService.processPendingQueue()` para procesar y vaciar la cola offline mediante peticiones UPSERT a Supabase.
+ */
+
 import { supabase, isSupabaseConfigured } from '../models/supabase';
 
+/**
+ * Estructura de cada elemento almacenado en la cola de sincronización pendiente.
+ */
 export interface PendingQueueItem {
   id: string;
   type: 'sale' | 'customer' | 'cash_movement' | 'product' | 'inventory_adjustment';
@@ -10,6 +24,9 @@ export interface PendingQueueItem {
 const QUEUE_STORAGE_KEY = 'storeflow_offline_queue_v1';
 
 export const syncService = {
+  /**
+   * Obtiene el listado de elementos pendientes almacenados en `localStorage`.
+   */
   getPendingQueue(): PendingQueueItem[] {
     try {
       const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
@@ -19,6 +36,9 @@ export const syncService = {
     }
   },
 
+  /**
+   * Guarda el arreglo de transacciones pendientes en `localStorage`.
+   */
   savePendingQueue(queue: PendingQueueItem[]): void {
     try {
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
@@ -27,6 +47,9 @@ export const syncService = {
     }
   },
 
+  /**
+   * Agrega un nuevo ítem a la cola pendiente (evitando duplicados por ID).
+   */
   addToPendingQueue(item: Omit<PendingQueueItem, 'createdAt'>): void {
     const queue = this.getPendingQueue();
     if (queue.some((q) => q.id === item.id)) return;
@@ -34,11 +57,17 @@ export const syncService = {
     this.savePendingQueue(queue);
   },
 
+  /**
+   * Remueve un ítem de la cola una vez procesado con éxito en el servidor.
+   */
   removeFromPendingQueue(id: string): void {
     const queue = this.getPendingQueue().filter((q) => q.id !== id);
     this.savePendingQueue(queue);
   },
 
+  /**
+   * Verifica la conectividad con la API de Supabase mediante un intento de lectura con tiempo límite de 4 segundos.
+   */
   async checkSupabaseHealth(): Promise<boolean> {
     if (!isSupabaseConfigured) return false;
     try {
@@ -59,11 +88,16 @@ export const syncService = {
     }
   },
 
+  /**
+   * Procesa secuencialmente todos los registros pendientes en la cola enviando peticiones HTTP UPSERT a Supabase.
+   * Invocado por: `StoreController.tsx` mediante el motor de auto-sincronización.
+   */
   async processPendingQueue(
     onProgress?: (processed: number, total: number) => void
   ): Promise<{ success: number; failed: number }> {
     if (!isSupabaseConfigured) return { success: 0, failed: 0 };
 
+    // Si el servidor no responde o no hay internet, detiene el procesamiento
     const isHealthy = await this.checkSupabaseHealth();
     if (!isHealthy) return { success: 0, failed: 0 };
 
@@ -73,6 +107,7 @@ export const syncService = {
     let success = 0;
     let failed = 0;
 
+    // Recorre secuencialmente la cola y procesa según el tipo de entidad
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       try {
@@ -162,6 +197,7 @@ export const syncService = {
           });
         }
 
+        // Remueve el ítem procesado con éxito
         this.removeFromPendingQueue(item.id);
         success++;
         if (onProgress) onProgress(i + 1, queue.length);

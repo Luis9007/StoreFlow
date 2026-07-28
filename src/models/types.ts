@@ -1,5 +1,17 @@
+/**
+ * @file types.ts
+ * @description Modelos de datos del dominio principal del sistema StoreFlow.
+ * 
+ * RELACIÓN CON OTROS MÓDULOS:
+ * - Servicios (src/services): Utilizan estas interfaces para tipar los resultados devueltos por la API REST de Supabase.
+ * - Controladores (src/controllers): Operan sobre estas estructuras dentro del estado global AppDatabase.
+ * - Vistas (src/views): Renderizan componentes basados en el tipado de estas entidades.
+ */
+
+/** Roles de usuario soportados */
 export type Role = 'supervisor' | 'cajero';
 
+/** Entidad de Usuario del sistema */
 export interface User {
   id: string;
   name: string;
@@ -10,6 +22,7 @@ export interface User {
   createdAt: string;
 }
 
+/** Categoría de productos del catálogo */
 export interface Category {
   id: string;
   name: string;
@@ -17,11 +30,13 @@ export interface Category {
   icon: string;
 }
 
+/** Marca comercial de productos */
 export interface Brand {
   id: string;
   name: string;
 }
 
+/** Producto del inventario */
 export interface Product {
   id: string;
   sku: string;
@@ -40,6 +55,7 @@ export interface Product {
   createdAt: string;
 }
 
+/** Cliente registrado para ventas y crédito de cartera */
 export interface Customer {
   id: string;
   name: string;
@@ -47,11 +63,12 @@ export interface Customer {
   phone: string;
   email: string;
   address: string;
-  balance: number;
+  balance: number; // Saldo pendiente por pagar (cartera de crédito)
   notes: string;
   createdAt: string;
 }
 
+/** Proveedor comercial */
 export interface Supplier {
   id: string;
   name: string;
@@ -64,6 +81,7 @@ export interface Supplier {
   createdAt: string;
 }
 
+/** Ítem individual dentro de una orden de compra */
 export interface PurchaseItem {
   productId: string;
   productName: string;
@@ -72,6 +90,7 @@ export interface PurchaseItem {
   subtotal: number;
 }
 
+/** Orden de compra a proveedor */
 export interface Purchase {
   id: string;
   reference: string;
@@ -84,6 +103,7 @@ export interface Purchase {
   createdAt: string;
 }
 
+/** Ítem individual dentro de una venta del POS */
 export interface SaleItem {
   productId: string;
   productName: string;
@@ -93,8 +113,10 @@ export interface SaleItem {
   subtotal: number;
 }
 
+/** Métodos de pago permitidos en el punto de venta */
 export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'credito';
 
+/** Encabezado de Venta procesada */
 export interface Sale {
   id: string;
   reference: string;
@@ -114,8 +136,10 @@ export interface Sale {
   createdAt: string;
 }
 
+/** Tipos de movimiento financiero o logístico dentro de una sesión de caja */
 export type CashMovementType = 'apertura' | 'cierre' | 'venta' | 'abono' | 'cliente' | 'producto' | 'compra' | 'inventario' | 'ingreso' | 'egreso';
 
+/** Registro de movimiento de caja registradora */
 export interface CashMovement {
   id: string;
   type: CashMovementType;
@@ -128,6 +152,7 @@ export interface CashMovement {
   createdAt: string;
 }
 
+/** Turno / Sesión de caja registradora */
 export interface CashSession {
   id: string;
   openingAmount: number;
@@ -140,6 +165,7 @@ export interface CashSession {
   movements: CashMovement[];
 }
 
+/** Registro histórico de ajuste manual de stock */
 export interface InventoryAdjustment {
   id: string;
   productId: string;
@@ -153,6 +179,7 @@ export interface InventoryAdjustment {
   createdAt: string;
 }
 
+/** Configuración corporativa del negocio */
 export interface CompanySettings {
   name: string;
   legalName: string;
@@ -167,6 +194,7 @@ export interface CompanySettings {
   theme: 'light' | 'dark';
 }
 
+/** Registro de bitácora de auditoría de actividad */
 export interface ActivityLog {
   id: string;
   action: string;
@@ -176,6 +204,7 @@ export interface ActivityLog {
   createdAt: string;
 }
 
+/** Objeto contenedor del estado completo de la base de datos de la aplicación */
 export interface AppDatabase {
   users: User[];
   categories: Category[];
