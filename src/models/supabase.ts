@@ -12,9 +12,25 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Lectura de variables de entorno de Vite para la URL y la llave anónima de la API de Supabase
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Helper seguro para obtener variables de entorno en frontend (Vite) y backend (Node.js)
+const getEnvVar = (name: string): string => {
+  if (typeof process !== 'undefined' && process.env && process.env[name]) {
+    return process.env[name] || '';
+  }
+  try {
+    const metaEnv = (import.meta as any).env;
+    if (metaEnv && metaEnv[name]) {
+      return metaEnv[name] || '';
+    }
+  } catch {
+    // Ignorar si import.meta no es accesible
+  }
+  return '';
+};
+
+// Lectura de variables de entorno para la URL y la llave anónima de la API de Supabase
+const supabaseUrl = getEnvVar('VITE_SUPABASE_URL') || getEnvVar('SUPABASE_URL');
+const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY') || getEnvVar('SUPABASE_ANON_KEY');
 
 /**
  * Flag booleano que determina si la integración con el backend Supabase está completamente configurada.
