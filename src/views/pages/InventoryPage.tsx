@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Boxes, AlertTriangle, TrendingUp, TrendingDown, Settings2, Search, ArrowDownToLine, ArrowUpFromLine, Sliders } from 'lucide-react';
 import { useStore } from '@/controllers/StoreController';
@@ -20,18 +21,35 @@ export function InventoryPage() {
   const sym = db.settings.currencySymbol;
   const canAdjust = canPerformAction(currentUser?.role, 'inventory.adjust');
 
+  const [searchParams] = useSearchParams();
+  const filterParam = searchParams.get('filter');
+
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'stock' | 'kardex'>('stock');
+  const [stockFilter, setStockFilter] = useState<'all' | 'low'>(filterParam === 'low-stock' ? 'low' : 'all');
   const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
   const [newStock, setNewStock] = useState('');
   const [reason, setReason] = useState('');
   const [adjustType, setAdjustType] = useState<'entrada' | 'salida' | 'ajuste'>('ajuste');
 
+  useEffect(() => {
+    if (filterParam === 'low-stock') {
+      setStockFilter('low');
+      setTab('stock');
+    }
+  }, [filterParam]);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return db.products;
-    const q = search.toLowerCase();
-    return db.products.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
-  }, [db.products, search]);
+    let list = db.products;
+    if (stockFilter === 'low') {
+      list = list.filter((p) => p.stock <= p.minStock);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
+    }
+    return list;
+  }, [db.products, search, stockFilter]);
 
   const lowStock = db.products.filter((p) => p.stock <= p.minStock);
   const totalValue = db.products.reduce((s, p) => s + p.cost * p.stock, 0);
@@ -167,9 +185,32 @@ export function InventoryPage() {
         <>
           <Card className="mb-4">
             <CardContent className="p-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar producto..." className="pl-10" />
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
+                  <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre o SKU..." className="pl-10" />
+                </div>
+                <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0">
+                  <button
+                    onClick={() => setStockFilter('all')}
+                    className={cn(
+                      'px-3 py-2 rounded-xl text-xs font-semibold transition-all flex-1 sm:flex-initial text-center',
+                      stockFilter === 'all' ? 'bg-primary text-primary-fg' : 'bg-surface-2 text-muted hover:text-text'
+                    )}
+                  >
+                    Todos ({db.products.length})
+                  </button>
+                  <button
+                    onClick={() => setStockFilter('low')}
+                    className={cn(
+                      'px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial',
+                      stockFilter === 'low' ? 'bg-danger text-white shadow-sm' : 'bg-danger/10 text-danger hover:bg-danger/20'
+                    )}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Stock Bajo ({lowStock.length})
+                  </button>
+                </div>
               </div>
             </CardContent>
           </Card>

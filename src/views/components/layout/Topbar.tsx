@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Menu, Moon, Sun, Bell, Search } from 'lucide-react';
 import { useStore } from '@/controllers/StoreController';
 
@@ -8,13 +9,33 @@ interface TopbarProps {
 
 export function Topbar({ onMenuClick }: TopbarProps) {
   const { db, setTheme, activeCashSession } = useStore();
+  const navigate = useNavigate();
   const [showNotif, setShowNotif] = useState(false);
 
   const lowStockCount = db.products.filter((p) => p.stock <= p.minStock).length;
   const notifs = [
-    ...(lowStockCount > 0 ? [{ icon: '⚠️', text: `${lowStockCount} producto(s) con stock bajo` }] : []),
-    ...(activeCashSession ? [{ icon: '🟢', text: 'Caja abierta' }] : [{ icon: '🔴', text: 'Caja cerrada' }]),
+    ...(lowStockCount > 0
+      ? [
+          {
+            id: 'low-stock',
+            icon: '⚠️',
+            text: `${lowStockCount} producto(s) con stock bajo`,
+            path: '/app/inventory?filter=low-stock',
+          },
+        ]
+      : []),
+    {
+      id: 'cash-status',
+      icon: activeCashSession ? '🟢' : '🔴',
+      text: activeCashSession ? 'Caja abierta' : 'Caja cerrada',
+      path: '/app/cash',
+    },
   ];
+
+  const handleNotificationClick = (path: string) => {
+    setShowNotif(false);
+    navigate(path);
+  };
 
   return (
     <header className="sticky top-0 z-20 h-16 sf-glass border-b border-border flex items-center px-4 lg:px-6 gap-3">
@@ -42,7 +63,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         >
           <Bell className="h-5 w-5" />
           {lowStockCount > 0 && (
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-danger ring-2 ring-surface" />
+            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-danger ring-2 ring-surface animate-pulse" />
           )}
         </button>
         {showNotif && (
@@ -50,10 +71,14 @@ export function Topbar({ onMenuClick }: TopbarProps) {
             <div className="fixed inset-0 z-10" onClick={() => setShowNotif(false)} />
             <div className="absolute right-0 top-full mt-2 w-72 sf-card bg-surface rounded-xl shadow-float p-2 z-20 animate-scale-in">
               <p className="px-3 py-2 text-xs font-semibold text-muted uppercase">Notificaciones</p>
-              {notifs.map((n, i) => (
-                <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-surface-2 cursor-pointer">
+              {notifs.map((n) => (
+                <div
+                  key={n.id}
+                  onClick={() => handleNotificationClick(n.path)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-surface-2 cursor-pointer transition-colors"
+                >
                   <span className="text-lg">{n.icon}</span>
-                  <span className="text-sm text-text">{n.text}</span>
+                  <span className="text-sm font-medium text-text hover:text-primary">{n.text}</span>
                 </div>
               ))}
             </div>
