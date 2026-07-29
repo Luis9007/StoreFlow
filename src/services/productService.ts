@@ -82,6 +82,13 @@ export const productService = {
   },
 
   /**
+   * Registra o actualiza una marca vía productModel.
+   */
+  async upsertBrand(brand: Brand): Promise<void> {
+    await productModel.upsertBrand(brand);
+  },
+
+  /**
    * Registra o actualiza un producto vía productModel.
    */
   async upsertProduct(p: Product): Promise<void> {

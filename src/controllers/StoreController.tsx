@@ -131,6 +131,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // 3. Controlador de Dominio: Productos e Inventario
   const {
     upsertCategory,
+    upsertBrand,
     upsertProduct,
     deleteProduct,
     adjustStock,
@@ -279,6 +280,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     resetData,
     addLog,
     upsertCategory,
+    upsertBrand,
     upsertProduct,
     deleteProduct,
     adjustStock,

@@ -13,6 +13,7 @@ import type {
   AppDatabase,
   User,
   Category,
+  Brand,
   Product,
   Customer,
   Supplier,
@@ -42,8 +43,9 @@ export interface StoreContextValue {
   upsertUser: (u: User) => void;
   deleteUser: (id: string) => void;
 
-  // Catálogo de Productos y Categorías (ProductController ➔ productService)
+  // Catálogo de Productos, Categorías y Marcas (ProductController ➔ productService)
   upsertCategory: (c: Category) => void;
+  upsertBrand: (b: Brand) => void;
   upsertProduct: (p: Product) => void;
   deleteProduct: (id: string) => void;
   adjustStock: (productId: string, newStock: number, reason: string, type: 'entrada' | 'salida' | 'ajuste') => void;

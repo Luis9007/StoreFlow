@@ -15,7 +15,7 @@ import { DataTable, type Column } from '@/views/components/ui/DataTable';
 import { Breadcrumb } from '@/views/components/ui/Breadcrumb';
 import { PageHeader } from '@/views/components/ui/PageHeader';
 import { formatCurrency, generateSequentialId, generateSkuFromName, cn } from '@/lib/utils';
-import type { Product, Category } from '@/models/types';
+import type { Product, Category, Brand } from '@/models/types';
 
 const playBeep = () => {
   try {
@@ -71,7 +71,7 @@ const emptyProduct = (existingProducts: Product[] = []): Product => ({
 });
 
 export function ProductsPage() {
-  const { db, upsertCategory, upsertProduct, deleteProduct, currentUser } = useStore();
+  const { db, upsertCategory, upsertBrand, upsertProduct, deleteProduct, currentUser } = useStore();
   const toast = useToast();
   const sym = db.settings.currencySymbol;
   const canCreate = canPerformAction(currentUser?.role, 'product.create');
@@ -83,7 +83,9 @@ export function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showBrandModal, setShowBrandModal] = useState(false);
   const [newCategoryForm, setNewCategoryForm] = useState({ name: '', color: '#0ea5e9' });
+  const [newBrandForm, setNewBrandForm] = useState({ name: '' });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showProductScanner, setShowProductScanner] = useState(false);
   const [isSearchingExternal, setIsSearchingExternal] = useState(false);
@@ -122,6 +124,38 @@ export function ProductsPage() {
     toast.success('Categoría creada', `Categoría "${newCategory.name}" registrada y seleccionada`);
   };
 
+  const handleCreateBrand = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBrandForm.name.trim()) {
+      toast.error('Nombre requerido', 'Ingresa el nombre de la marca');
+      return;
+    }
+
+    const brandName = newBrandForm.name.trim();
+    const cleanId = `brand_${brandName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '_')}`;
+
+    const duplicate = db.brands.find((b) => b.name.toLowerCase() === brandName.toLowerCase());
+    if (duplicate) {
+      toast.warning('Marca existente', `La marca "${brandName}" ya existe y fue seleccionada.`);
+      if (editing) setEditing({ ...editing, brandId: duplicate.id });
+      setShowBrandModal(false);
+      return;
+    }
+
+    const newBrand: Brand = {
+      id: cleanId,
+      name: brandName,
+    };
+
+    upsertBrand(newBrand);
+    if (editing) {
+      setEditing({ ...editing, brandId: newBrand.id });
+    }
+    setShowBrandModal(false);
+    setNewBrandForm({ name: '' });
+    toast.success('Marca creada', `Marca "${newBrand.name}" registrada y seleccionada`);
+  };
+
   const handleScanBarcodeForProduct = async (code: string) => {
     const cleanCode = code.trim();
     if (!cleanCode || !editing) return;
@@ -132,42 +166,94 @@ export function ProductsPage() {
 
     let updatedName = editing.name;
     let updatedDesc = editing.description;
+    let updatedBrandId = editing.brandId;
+    let foundExternal = false;
 
     try {
-      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(cleanCode)}.json`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === 1 && data.product) {
+      // 1. Try Open Food Facts API v2
+      const resV2 = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(cleanCode)}.json`);
+      if (resV2.ok) {
+        const data = await resV2.json();
+        if (data.product) {
           const p = data.product;
-          const nameFromApi = (p.product_name_es || p.product_name || p.abbreviated_product_name || '').trim();
-          if (nameFromApi && !editing.name) {
-            updatedName = nameFromApi;
+          const name = (p.product_name_es || p.product_name || p.product_name_en || p.abbreviated_product_name || '').trim();
+          const brandName = (p.brands || p.brand_owner || '').split(',')[0]?.trim() || '';
+          const fullName = brandName && name && !name.toLowerCase().includes(brandName.toLowerCase()) ? `${brandName} ${name}` : name;
+          if (fullName) {
+            foundExternal = true;
+            if (!editing.name) updatedName = fullName;
+            if (!editing.description && (p.generic_name_es || p.generic_name)) {
+              updatedDesc = (p.generic_name_es || p.generic_name).trim();
+            }
+
+            if (brandName && !editing.brandId) {
+              const existingBrand = db.brands.find((b) => b.name.toLowerCase() === brandName.toLowerCase());
+              if (existingBrand) {
+                updatedBrandId = existingBrand.id;
+              } else {
+                const autoBrandId = `brand_${brandName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '_')}`;
+                const autoBrand: Brand = { id: autoBrandId, name: brandName };
+                upsertBrand(autoBrand);
+                updatedBrandId = autoBrandId;
+              }
+            }
           }
-          if (!editing.description && (p.generic_name_es || p.generic_name)) {
-            updatedDesc = (p.generic_name_es || p.generic_name).trim();
+        }
+      }
+
+      // 2. Fallback to Open Food Facts API v0 if not found
+      if (!foundExternal) {
+        const resV0 = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(cleanCode)}.json`);
+        if (resV0.ok) {
+          const data = await resV0.json();
+          if (data.status === 1 && data.product) {
+            const p = data.product;
+            const name = (p.product_name_es || p.product_name || p.product_name_en || '').trim();
+            const brandName = (p.brands || '').split(',')[0]?.trim() || '';
+            const fullName = brandName && name && !name.toLowerCase().includes(brandName.toLowerCase()) ? `${brandName} ${name}` : name;
+            if (fullName) {
+              foundExternal = true;
+              if (!editing.name) updatedName = fullName;
+              if (!editing.description && (p.generic_name_es || p.generic_name)) {
+                updatedDesc = (p.generic_name_es || p.generic_name).trim();
+              }
+
+              if (brandName && !editing.brandId) {
+                const existingBrand = db.brands.find((b) => b.name.toLowerCase() === brandName.toLowerCase());
+                if (existingBrand) {
+                  updatedBrandId = existingBrand.id;
+                } else {
+                  const autoBrandId = `brand_${brandName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '_')}`;
+                  const autoBrand: Brand = { id: autoBrandId, name: brandName };
+                  upsertBrand(autoBrand);
+                  updatedBrandId = autoBrandId;
+                }
+              }
+            }
           }
         }
       }
     } catch {
-      // Ignore network errors
+      // Ignore network or CORS errors
     } finally {
       setIsSearchingExternal(false);
     }
 
-    const generatedSku = updatedName ? generateSkuFromName(updatedName) : (editing.sku || cleanCode);
+    const generatedSku = updatedName ? generateSkuFromName(updatedName) : editing.sku;
 
     setEditing({
       ...editing,
       barcode: cleanCode,
       name: updatedName,
       description: updatedDesc,
+      brandId: updatedBrandId,
       sku: generatedSku,
     });
 
-    if (updatedName && updatedName !== editing.name) {
-      toast.success('¡Producto identificado!', `Se autocompletó el nombre: "${updatedName}" y código: ${cleanCode}`);
+    if (foundExternal && updatedName) {
+      toast.success('¡Producto identificado!', `Nombre autocompletado: "${updatedName}" (Código: ${cleanCode})`);
     } else {
-      toast.success('Código de barras capturado', `Código ${cleanCode} asignado al producto.`);
+      toast.info('Código asignado', `Código ${cleanCode} capturado. Ingresa el nombre del producto.`);
     }
   };
 
@@ -428,10 +514,22 @@ export function ProductsPage() {
                 ))}
               </Select>
             </div>
-            <Select label="Marca" value={editing.brandId} onChange={(e) => setEditing({ ...editing, brandId: e.target.value })}>
-              <option value="">Sin marca</option>
-              {db.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </Select>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-text">Marca</span>
+                <button
+                  type="button"
+                  onClick={() => setShowBrandModal(true)}
+                  className="text-[11px] text-primary hover:underline flex items-center gap-1 font-semibold"
+                >
+                  <Plus className="h-3 w-3" /> + Nueva marca
+                </button>
+              </div>
+              <Select value={editing.brandId} onChange={(e) => setEditing({ ...editing, brandId: e.target.value })}>
+                <option value="">Sin marca</option>
+                {db.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </Select>
+            </div>
             <Select
               label="Unidad de medida"
               value={editing.unit}
@@ -505,6 +603,34 @@ export function ProductsPage() {
             </Button>
             <Button type="submit">
               <Plus className="h-4 w-4" /> Guardar Categoría
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Quick New Brand Dialog */}
+      <Dialog
+        open={showBrandModal}
+        onClose={() => setShowBrandModal(false)}
+        title="Crear Nueva Marca"
+        description="Agrega una nueva marca de fabricante al catálogo"
+        size="sm"
+      >
+        <form onSubmit={handleCreateBrand} className="space-y-4">
+          <Input
+            label="Nombre de la marca *"
+            placeholder="Ej. Coca-Cola, Sabritas, Nestlé, Sony..."
+            value={newBrandForm.name}
+            onChange={(e) => setNewBrandForm({ name: e.target.value })}
+            required
+            autoFocus
+          />
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <Button variant="outline" type="button" onClick={() => setShowBrandModal(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit">
+              <Plus className="h-4 w-4" /> Guardar Marca
             </Button>
           </div>
         </form>

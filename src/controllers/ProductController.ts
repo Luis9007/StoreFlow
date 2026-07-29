@@ -13,7 +13,7 @@
  */
 
 import { useCallback } from 'react';
-import type { AppDatabase, User, Product, Category, InventoryAdjustment, CashMovementType } from '../models/types';
+import type { AppDatabase, User, Product, Category, Brand, InventoryAdjustment, CashMovementType } from '../models/types';
 import { generateId } from '../lib/utils';
 import { productService } from '../services/productService';
 
@@ -37,9 +37,6 @@ export function useProductController(
 ) {
   /**
    * Agrega o actualiza una categoría.
-   * 1. Actualiza el estado local `setDb` (React).
-   * 2. Registra la acción en la bitácora de auditoría (`addLog`).
-   * 3. Delega la sincronización con la API REST a `productService.upsertCategory(c)`.
    */
   const upsertCategory = useCallback(
     (c: Category) => {
@@ -53,6 +50,25 @@ export function useProductController(
 
       addLog('Categorías', `Categoría "${c.name}" ${isNew ? 'registrada' : 'actualizada'}`);
       productService.upsertCategory(c).catch(console.error);
+    },
+    [setDb, addLog]
+  );
+
+  /**
+   * Agrega o actualiza una marca.
+   */
+  const upsertBrand = useCallback(
+    (b: Brand) => {
+      let isNew = false;
+      setDb((prev) => {
+        const exists = prev.brands.some((x) => x.id === b.id);
+        isNew = !exists;
+        const brands = exists ? prev.brands.map((x) => (x.id === b.id ? b : x)) : [...prev.brands, b];
+        return { ...prev, brands };
+      });
+
+      addLog('Marcas', `Marca "${b.name}" ${isNew ? 'registrada' : 'actualizada'}`);
+      productService.upsertBrand(b).catch(console.error);
     },
     [setDb, addLog]
   );
@@ -175,6 +191,7 @@ export function useProductController(
 
   return {
     upsertCategory,
+    upsertBrand,
     upsertProduct,
     deleteProduct,
     adjustStock,

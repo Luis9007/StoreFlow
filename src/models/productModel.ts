@@ -8,7 +8,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from './supabase';
-import type { Product, Category, InventoryAdjustment } from './types';
+import type { Product, Category, Brand, InventoryAdjustment } from './types';
 
 export const productModel = {
   /**
@@ -54,6 +54,17 @@ export const productModel = {
       name: cat.name,
       color: cat.color,
       icon: cat.icon,
+    });
+  },
+
+  /**
+   * Registra o actualiza una marca en la BD.
+   */
+  async upsertBrand(b: Brand): Promise<void> {
+    if (!isSupabaseConfigured) return;
+    await supabase.from('brands').upsert({
+      id: b.id,
+      name: b.name,
     });
   },
 
