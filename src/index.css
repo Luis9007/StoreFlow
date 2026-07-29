@@ -76,6 +76,17 @@
     border: 2px solid rgb(var(--sf-bg));
   }
   ::-webkit-scrollbar-thumb:hover { background: rgb(var(--sf-muted)); }
+
+  /* Ocultar flechas arriba/abajo (spin buttons) de todos los campos numéricos */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 @layer components {
