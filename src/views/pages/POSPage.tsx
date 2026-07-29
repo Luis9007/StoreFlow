@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Star, Trash2, Plus, Minus, ShoppingCart, X, CreditCard,
-  Wallet, Banknote, Clock, Barcode, CheckCircle2, Printer, User, UserPlus, FileText, Lock, Unlock,
+  Wallet, Banknote, Clock, Barcode, CheckCircle2, Printer, User, UserPlus, FileText, Lock, Unlock, Store,
 } from 'lucide-react';
 import { useStore } from '@/controllers/StoreController';
 import { useToast } from '@/views/components/ui/Toast';
@@ -278,7 +278,13 @@ export function POSPage() {
   return (
     <div className="h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex items-center justify-between mb-3">
-        <Breadcrumb items={[{ label: 'Inicio', href: '/app' }, { label: 'Punto de Venta' }]} />
+        <div className="flex items-center gap-2">
+          <Breadcrumb items={[{ label: 'Inicio', href: '/app' }, { label: 'Punto de Venta' }]} />
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold text-xs">
+            <Store className="h-3.5 w-3.5" />
+            <span className="truncate max-w-[200px]">{db.settings.name || 'StoreFlow'}</span>
+          </div>
+        </div>
         <Button variant="outline" size="sm" onClick={() => setShowFolioModal(true)}>
           <FileText className="h-4 w-4" /> Buscar Folio
         </Button>

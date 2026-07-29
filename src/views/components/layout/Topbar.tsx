@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, Moon, Sun, Bell, Search } from 'lucide-react';
+import { Menu, Moon, Sun, Bell, Search, Store } from 'lucide-react';
 import { useStore } from '@/controllers/StoreController';
 
 interface TopbarProps {
@@ -43,8 +43,16 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         <Menu className="h-5 w-5" />
       </button>
 
+      {/* Store Name Badge */}
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-2 border border-border/60 text-text shrink-0">
+        <Store className="h-4 w-4 text-primary shrink-0" />
+        <span className="font-semibold text-sm truncate max-w-[150px] sm:max-w-[220px]" title={db.settings.name || 'StoreFlow'}>
+          {db.settings.name || 'StoreFlow'}
+        </span>
+      </div>
+
       {/* Search */}
-      <div className="relative flex-1 max-w-md hidden sm:block">
+      <div className="relative flex-1 max-w-md hidden sm:block ml-2">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
         <input
           type="text"

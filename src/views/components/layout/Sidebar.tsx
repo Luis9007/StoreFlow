@@ -26,7 +26,7 @@ const allNavItems = [
 ];
 
 export function Sidebar({ open, onClose }: SidebarProps) {
-  const { currentUser, logout } = useStore();
+  const { db, currentUser, logout } = useStore();
   const navigate = useNavigate();
 
   const navItems = allNavItems.filter((item) => canAccessModule(currentUser?.role, item.module));
@@ -35,6 +35,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     logout();
     navigate('/login');
   };
+
+  const storeName = db.settings.name || 'StoreFlow';
 
   return (
     <>
@@ -46,17 +48,23 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         )}
       >
         {/* Brand */}
-        <div className="flex items-center justify-between px-5 h-16 border-b border-white/5">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-              <span className="font-display font-bold text-white text-lg">S</span>
+        <div className="flex items-center justify-between px-4 h-16 border-b border-white/5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shrink-0">
+              <span className="font-display font-bold text-white text-lg">
+                {storeName.charAt(0).toUpperCase()}
+              </span>
             </div>
-            <div>
-              <p className="font-display font-bold text-white text-base leading-none">StoreFlow</p>
-              <p className="text-[10px] text-sidebar-fg/60 mt-0.5">POS & Gestión</p>
+            <div className="min-w-0">
+              <p className="font-display font-bold text-white text-sm leading-tight truncate" title={storeName}>
+                {storeName}
+              </p>
+              <p className="text-[10px] text-sidebar-fg/60 mt-0.5 truncate">
+                {db.settings.legalName || 'POS & Gestión'}
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="lg:hidden p-1 text-sidebar-fg/60 hover:text-white">
+          <button onClick={onClose} className="lg:hidden p-1 text-sidebar-fg/60 hover:text-white shrink-0 ml-1">
             <X className="h-5 w-5" />
           </button>
         </div>
