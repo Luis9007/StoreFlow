@@ -136,13 +136,25 @@ export function POSPage() {
     );
   };
 
+  const setDiscount = (productId: string, discount: number) => {
+    setCart((prev) =>
+      prev.map((l) => {
+        if (l.productId !== productId) return l;
+        const clamped = Math.max(0, Math.min(100, isNaN(discount) ? 0 : discount));
+        return { ...l, discount: clamped };
+      })
+    );
+  };
+
   const removeLine = (productId: string) => {
     setCart((prev) => prev.filter((l) => l.productId !== productId));
   };
 
-  const subtotal = cart.reduce((s, l) => s + l.price * l.quantity * (1 - l.discount / 100), 0);
-  const tax = subtotal * (db.settings.taxRate / 100);
-  const total = subtotal + tax;
+  const subtotalGross = cart.reduce((s, l) => s + l.price * l.quantity, 0);
+  const totalDiscount = cart.reduce((s, l) => s + (l.price * l.quantity * (l.discount / 100)), 0);
+  const subtotalNet = subtotalGross - totalDiscount;
+  const tax = subtotalNet * (db.settings.taxRate / 100);
+  const total = subtotalNet + tax;
   const cashNum = parseFloat(cashReceived) || 0;
   const change = paymentMethod === 'efectivo' && cashNum > total ? cashNum - total : 0;
 
@@ -235,8 +247,8 @@ export function POSPage() {
       customerId: customer?.id ?? null,
       customerName: customer?.name ?? 'Público general',
       items,
-      subtotal,
-      discount: 0,
+      subtotal: subtotalNet,
+      discount: totalDiscount,
       tax,
       total,
       paymentMethod,
@@ -409,40 +421,72 @@ export function POSPage() {
               {cart.length === 0 ? (
                 <EmptyState icon={<ShoppingCart className="h-10 w-10" />} title="Carrito vacío" description="Toca productos para agregarlos" />
               ) : (
-                cart.map((line) => (
-                  <motion.div
-                    key={line.productId}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="flex items-center gap-2 p-2.5 rounded-xl bg-surface-2"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-text truncate">{line.productName}</p>
-                      <p className="text-xs text-muted">{formatCurrency(line.price, sym)} c/u</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => updateQty(line.productId, -1)} className="h-7 w-7 rounded-lg bg-surface border border-border flex items-center justify-center hover:bg-surface-2">
-                        <Minus className="h-3.5 w-3.5" />
-                      </button>
-                      <input
-                        type="number"
-                        value={line.quantity}
-                        onChange={(e) => setQty(line.productId, parseInt(e.target.value) || 1)}
-                        className="w-10 h-7 text-center text-sm bg-surface border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                      <button onClick={() => updateQty(line.productId, 1)} className="h-7 w-7 rounded-lg bg-surface border border-border flex items-center justify-center hover:bg-surface-2">
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <span className="text-sm font-semibold text-text w-16 text-right">
-                      {formatCurrency(line.price * line.quantity, sym)}
-                    </span>
-                    <button onClick={() => removeLine(line.productId)} className="p-1 text-muted hover:text-danger">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </motion.div>
-                ))
+                cart.map((line) => {
+                  const lineGross = line.price * line.quantity;
+                  const lineNet = lineGross * (1 - line.discount / 100);
+                  return (
+                    <motion.div
+                      key={line.productId}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="flex flex-col gap-2 p-2.5 rounded-xl bg-surface-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-text truncate">{line.productName}</p>
+                          <p className="text-xs text-muted">{formatCurrency(line.price, sym)} c/u</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {line.discount > 0 ? (
+                            <>
+                              <p className="text-xs line-through text-muted">{formatCurrency(lineGross, sym)}</p>
+                              <p className="text-sm font-semibold text-emerald-500">{formatCurrency(lineNet, sym)}</p>
+                            </>
+                          ) : (
+                            <span className="text-sm font-semibold text-text">{formatCurrency(lineGross, sym)}</span>
+                          )}
+                        </div>
+                        <button onClick={() => removeLine(line.productId)} className="p-1 text-muted hover:text-danger ml-1">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {/* Controls: Quantity + % Discount */}
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50 text-xs">
+                        <div className="flex items-center gap-1">
+                          <span className="text-muted text-[11px]">Cant:</span>
+                          <button onClick={() => updateQty(line.productId, -1)} className="h-6 w-6 rounded bg-surface border border-border flex items-center justify-center hover:bg-surface-2">
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <input
+                            type="number"
+                            value={line.quantity}
+                            onChange={(e) => setQty(line.productId, parseInt(e.target.value) || 1)}
+                            className="w-9 h-6 text-center text-xs bg-surface border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <button onClick={() => updateQty(line.productId, 1)} className="h-6 w-6 rounded bg-surface border border-border flex items-center justify-center hover:bg-surface-2">
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-1 bg-surface px-2 py-0.5 rounded-lg border border-border">
+                          <span className="text-[11px] text-muted font-medium">% Desc:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={line.discount || ''}
+                            onChange={(e) => setDiscount(line.productId, parseFloat(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-10 h-5 text-center text-xs bg-transparent text-text font-semibold focus:outline-none focus:ring-1 focus:ring-primary rounded"
+                          />
+                          <span className="text-[10px] text-muted">%</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })
               )}
             </AnimatePresence>
           </div>
@@ -466,15 +510,21 @@ export function POSPage() {
             )}
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between text-muted">
-                <span>Subtotal</span>
-                <span>{formatCurrency(subtotal, sym)}</span>
+                <span>Subtotal bruto</span>
+                <span>{formatCurrency(subtotalGross, sym)}</span>
               </div>
+              {totalDiscount > 0 && (
+                <div className="flex justify-between text-emerald-500 font-medium">
+                  <span>Descuento aplicado</span>
+                  <span>-{formatCurrency(totalDiscount, sym)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-muted">
                 <span>IVA ({db.settings.taxRate}%)</span>
                 <span>{formatCurrency(tax, sym)}</span>
               </div>
               <div className="flex justify-between font-display font-bold text-lg text-text pt-1 border-t border-border">
-                <span>Total</span>
+                <span>Total a Pagar</span>
                 <span>{formatCurrency(total, sym)}</span>
               </div>
             </div>
@@ -536,6 +586,28 @@ export function POSPage() {
               <span className="font-semibold text-text">
                 {db.customers.find((c) => c.id === customerId)?.name || 'Público general'}
               </span>
+            </div>
+
+            {/* Financial Summary Breakdown */}
+            <div className="p-3.5 rounded-xl bg-surface-2 space-y-1.5 text-sm border border-border">
+              <div className="flex justify-between text-muted">
+                <span>Subtotal bruto:</span>
+                <span>{formatCurrency(subtotalGross, sym)}</span>
+              </div>
+              {totalDiscount > 0 && (
+                <div className="flex justify-between text-emerald-500 font-medium">
+                  <span>Descuento aplicado:</span>
+                  <span>-{formatCurrency(totalDiscount, sym)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-muted">
+                <span>IVA ({db.settings.taxRate}%):</span>
+                <span>{formatCurrency(tax, sym)}</span>
+              </div>
+              <div className="flex justify-between text-base font-bold text-text pt-1.5 border-t border-border">
+                <span>Total a pagar:</span>
+                <span className="text-primary font-display">{formatCurrency(total, sym)}</span>
+              </div>
             </div>
 
             <div>
@@ -616,6 +688,15 @@ export function POSPage() {
               <div className="flex justify-between"><span className="text-muted">Cliente</span><span className="font-semibold text-text">{lastSale.customerName}</span></div>
               <div className="flex justify-between"><span className="text-muted">Vendedor</span><span className="text-text">{lastSale.userName}</span></div>
               <div className="flex justify-between"><span className="text-muted">Forma de pago</span><span className="text-text capitalize font-medium">{lastSale.paymentMethod}</span></div>
+              
+              <div className="pt-2 border-t border-border/50 space-y-1">
+                <div className="flex justify-between text-xs text-muted"><span>Subtotal:</span><span>{formatCurrency(lastSale.subtotal, sym)}</span></div>
+                {lastSale.discount > 0 && (
+                  <div className="flex justify-between text-xs text-emerald-500 font-medium"><span>Descuento:</span><span>-{formatCurrency(lastSale.discount, sym)}</span></div>
+                )}
+                <div className="flex justify-between text-xs text-muted"><span>IVA ({db.settings.taxRate}%):</span><span>{formatCurrency(lastSale.tax, sym)}</span></div>
+              </div>
+
               {lastSale.cashReceived > 0 && (
                 <div className="flex justify-between"><span className="text-muted">Efectivo recibido</span><span className="text-text">{formatCurrency(lastSale.cashReceived, sym)}</span></div>
               )}
@@ -812,7 +893,10 @@ export function POSPage() {
                   <td style={{ paddingTop: '3px', verticalAlign: 'top' }}>
                     {item.quantity}x {item.productName}
                     <br />
-                    <span style={{ fontSize: '9px', color: '#444' }}>@ {formatCurrency(item.price, sym)}</span>
+                    <span style={{ fontSize: '9px', color: '#444' }}>
+                      @ {formatCurrency(item.price, sym)}
+                      {item.discount > 0 && ` (-${item.discount}% desc)`}
+                    </span>
                   </td>
                   <td style={{ paddingTop: '3px', textAlign: 'right', verticalAlign: 'top', fontWeight: 'bold' }}>
                     {formatCurrency(item.subtotal, sym)}
@@ -825,7 +909,10 @@ export function POSPage() {
           <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
 
           <div style={{ fontSize: '10px', textAlign: 'right' }}>
-            <p style={{ margin: '2px 0' }}>Subtotal: {formatCurrency(lastSale.subtotal, sym)}</p>
+            <p style={{ margin: '2px 0' }}>Subtotal bruto: {formatCurrency(lastSale.subtotal + (lastSale.discount || 0), sym)}</p>
+            {lastSale.discount > 0 && (
+              <p style={{ margin: '2px 0', color: '#059669' }}>Descuento total: -{formatCurrency(lastSale.discount, sym)}</p>
+            )}
             <p style={{ margin: '2px 0' }}>IVA ({db.settings.taxRate}%): {formatCurrency(lastSale.tax, sym)}</p>
             <p style={{ margin: '4px 0', fontSize: '13px', fontWeight: 'bold' }}>TOTAL: {formatCurrency(lastSale.total, sym)}</p>
             {lastSale.paymentMethod === 'efectivo' && (
