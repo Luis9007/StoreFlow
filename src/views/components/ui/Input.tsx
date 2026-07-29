@@ -106,12 +106,23 @@ export function CurrencyInput({
       return;
     }
 
-    let clean = raw.replace(/[^\d,.]/g, '');
-    clean = clean.replace(/\./g, ',');
+    let intPartRaw = raw;
+    let decPartRaw = '';
+    const hasComma = raw.includes(',');
+    const hasDecimalDot = !hasComma && raw.includes('.') && !raw.match(/\.\d{3}/);
 
-    const parts = clean.split(',');
-    const intDigits = parts[0].replace(/\D/g, '');
-    const decDigits = parts.length > 1 ? parts[1].replace(/\D/g, '').slice(0, decimals) : null;
+    if (hasComma) {
+      const parts = raw.split(',');
+      intPartRaw = parts[0];
+      decPartRaw = parts.slice(1).join('');
+    } else if (hasDecimalDot) {
+      const parts = raw.split('.');
+      intPartRaw = parts[0];
+      decPartRaw = parts.slice(1).join('');
+    }
+
+    const intDigits = intPartRaw.replace(/\D/g, '');
+    const decDigits = (hasComma || hasDecimalDot) ? decPartRaw.replace(/\D/g, '').slice(0, decimals) : null;
 
     if (!intDigits && decDigits === null) {
       setInputValue('');
@@ -124,7 +135,7 @@ export function CurrencyInput({
 
     setInputValue(formattedDisplay);
 
-    const numStr = `${intDigits || '0'}.${decDigits ?? '0'}`;
+    const numStr = `${intDigits || '0'}.${decDigits && decDigits.length > 0 ? decDigits : '0'}`;
     const parsed = parseFloat(numStr);
     onChange(isNaN(parsed) ? 0 : parsed);
   };
