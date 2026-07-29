@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Package, Plus, Search, Pencil, Trash2, Star, AlertTriangle, Barcode, DollarSign, Wand2, Camera, Loader2, Sparkles,
+  Package, Plus, Search, Pencil, Trash2, Star, AlertTriangle, Barcode, DollarSign, Wand2, Camera, Loader2, Sparkles, Tag,
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useStore } from '@/controllers/StoreController';
@@ -84,6 +84,8 @@ export function ProductsPage() {
   const [showForm, setShowForm] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showBrandModal, setShowBrandModal] = useState(false);
+  const [showBrandManagerModal, setShowBrandManagerModal] = useState(false);
+  const [brandEditing, setBrandEditing] = useState<Brand | null>(null);
   const [newCategoryForm, setNewCategoryForm] = useState({ name: '', color: '#0ea5e9' });
   const [newBrandForm, setNewBrandForm] = useState({ name: '' });
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -124,7 +126,7 @@ export function ProductsPage() {
     toast.success('Categoría creada', `Categoría "${newCategory.name}" registrada y seleccionada`);
   };
 
-  const handleCreateBrand = (e: React.FormEvent) => {
+  const handleSaveBrand = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBrandForm.name.trim()) {
       toast.error('Nombre requerido', 'Ingresa el nombre de la marca');
@@ -132,28 +134,40 @@ export function ProductsPage() {
     }
 
     const brandName = newBrandForm.name.trim();
-    const cleanId = `brand_${brandName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '_')}`;
 
-    const duplicate = db.brands.find((b) => b.name.toLowerCase() === brandName.toLowerCase());
-    if (duplicate) {
-      toast.warning('Marca existente', `La marca "${brandName}" ya existe y fue seleccionada.`);
-      if (editing) setEditing({ ...editing, brandId: duplicate.id });
-      setShowBrandModal(false);
-      return;
+    if (brandEditing) {
+      const updatedBrand: Brand = {
+        ...brandEditing,
+        name: brandName,
+      };
+      upsertBrand(updatedBrand);
+      toast.success('Marca actualizada', `Marca renombrada a "${brandName}"`);
+      setBrandEditing(null);
+    } else {
+      const cleanId = `brand_${brandName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '_')}`;
+
+      const duplicate = db.brands.find((b) => b.name.toLowerCase() === brandName.toLowerCase());
+      if (duplicate) {
+        toast.warning('Marca existente', `La marca "${brandName}" ya existe y fue seleccionada.`);
+        if (editing) setEditing({ ...editing, brandId: duplicate.id });
+        setShowBrandModal(false);
+        return;
+      }
+
+      const newBrand: Brand = {
+        id: cleanId,
+        name: brandName,
+      };
+
+      upsertBrand(newBrand);
+      if (editing) {
+        setEditing({ ...editing, brandId: newBrand.id });
+      }
+      toast.success('Marca creada', `Marca "${newBrand.name}" registrada y seleccionada`);
     }
 
-    const newBrand: Brand = {
-      id: cleanId,
-      name: brandName,
-    };
-
-    upsertBrand(newBrand);
-    if (editing) {
-      setEditing({ ...editing, brandId: newBrand.id });
-    }
     setShowBrandModal(false);
     setNewBrandForm({ name: '' });
-    toast.success('Marca creada', `Marca "${newBrand.name}" registrada y seleccionada`);
   };
 
   const handleScanBarcodeForProduct = async (code: string) => {
@@ -366,11 +380,16 @@ export function ProductsPage() {
         description={`${db.products.length} productos en catálogo`}
         icon={<Package className="h-5 w-5" />}
         actions={
-          canCreate ? (
-            <Button onClick={() => { setEditing(emptyProduct(db.products)); setShowForm(true); }}>
-              <Plus className="h-4 w-4" /> Nuevo producto
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setShowBrandManagerModal(true)}>
+              <Tag className="h-4 w-4" /> Marcas ({db.brands.length})
             </Button>
-          ) : undefined
+            {canCreate && (
+              <Button onClick={() => { setEditing(emptyProduct(db.products)); setShowForm(true); }}>
+                <Plus className="h-4 w-4" /> Nuevo producto
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -517,13 +536,35 @@ export function ProductsPage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-medium text-text">Marca</span>
-                <button
-                  type="button"
-                  onClick={() => setShowBrandModal(true)}
-                  className="text-[11px] text-primary hover:underline flex items-center gap-1 font-semibold"
-                >
-                  <Plus className="h-3 w-3" /> + Nueva marca
-                </button>
+                <div className="flex items-center gap-2">
+                  {editing.brandId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const b = db.brands.find((x) => x.id === editing.brandId);
+                        if (b) {
+                          setBrandEditing(b);
+                          setNewBrandForm({ name: b.name });
+                          setShowBrandModal(true);
+                        }
+                      }}
+                      className="text-[11px] text-muted hover:text-text flex items-center gap-1 font-semibold transition-colors"
+                    >
+                      <Pencil className="h-3 w-3" /> Editar
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBrandEditing(null);
+                      setNewBrandForm({ name: '' });
+                      setShowBrandModal(true);
+                    }}
+                    className="text-[11px] text-primary hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    <Plus className="h-3 w-3" /> + Nueva marca
+                  </button>
+                </div>
               </div>
               <Select value={editing.brandId} onChange={(e) => setEditing({ ...editing, brandId: e.target.value })}>
                 <option value="">Sin marca</option>
@@ -626,15 +667,15 @@ export function ProductsPage() {
         </form>
       </Dialog>
 
-      {/* Quick New Brand Dialog */}
+      {/* Quick New/Edit Brand Dialog */}
       <Dialog
         open={showBrandModal}
-        onClose={() => setShowBrandModal(false)}
-        title="Crear Nueva Marca"
-        description="Agrega una nueva marca de fabricante al catálogo"
+        onClose={() => { setShowBrandModal(false); setBrandEditing(null); }}
+        title={brandEditing ? 'Editar Marca' : 'Crear Nueva Marca'}
+        description={brandEditing ? 'Modifica el nombre de la marca' : 'Agrega una nueva marca de fabricante al catálogo'}
         size="sm"
       >
-        <form onSubmit={handleCreateBrand} className="space-y-4">
+        <form onSubmit={handleSaveBrand} className="space-y-4">
           <Input
             label="Nombre de la marca *"
             placeholder="Ej. Coca-Cola, Sabritas, Nestlé, Sony..."
@@ -644,14 +685,64 @@ export function ProductsPage() {
             autoFocus
           />
           <div className="flex justify-end gap-2 pt-4 border-t border-border">
-            <Button variant="outline" type="button" onClick={() => setShowBrandModal(false)}>
+            <Button variant="outline" type="button" onClick={() => { setShowBrandModal(false); setBrandEditing(null); }}>
               Cancelar
             </Button>
             <Button type="submit">
-              <Plus className="h-4 w-4" /> Guardar Marca
+              {brandEditing ? 'Guardar Cambios' : 'Guardar Marca'}
             </Button>
           </div>
         </form>
+      </Dialog>
+
+      {/* Brand Manager Dialog */}
+      <Dialog
+        open={showBrandManagerModal}
+        onClose={() => setShowBrandManagerModal(false)}
+        title="Catálogo de Marcas"
+        description="Administra y edita las marcas registradas en tu negocio"
+        size="md"
+      >
+        <div className="space-y-3">
+          <div className="flex justify-between items-center pb-2 border-b border-border">
+            <span className="text-xs font-semibold text-muted uppercase">Marca ({db.brands.length})</span>
+            <Button
+              size="sm"
+              onClick={() => {
+                setBrandEditing(null);
+                setNewBrandForm({ name: '' });
+                setShowBrandModal(true);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" /> + Nueva Marca
+            </Button>
+          </div>
+          <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+            {db.brands.length === 0 ? (
+              <p className="text-sm text-muted text-center py-4">No hay marcas registradas</p>
+            ) : (
+              db.brands.map((b) => (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-surface-2 hover:bg-surface border border-border/60 transition-colors"
+                >
+                  <span className="text-sm font-medium text-text">{b.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBrandEditing(b);
+                      setNewBrandForm({ name: b.name });
+                      setShowBrandModal(true);
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-surface-2 text-muted hover:text-primary transition-colors flex items-center gap-1 text-xs font-medium"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </Dialog>
 
       {/* Delete confirm */}
