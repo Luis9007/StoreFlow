@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Star, Trash2, Plus, Minus, ShoppingCart, X, CreditCard,
-  Wallet, Banknote, Clock, Barcode, CheckCircle2, Printer, User, UserPlus, FileText, Lock, Unlock, Store, Camera,
+  Wallet, Banknote, Clock, Barcode, CheckCircle2, XCircle, Printer, User, UserPlus, FileText, Lock, Unlock, Store, Camera,
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useStore } from '@/controllers/StoreController';
@@ -55,7 +55,7 @@ export function POSPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('efectivo');
-  const [cashReceived, setCashReceived] = useState<string>('');
+  const [cashReceived, setCashReceived] = useState<number>(0);
   const [notes, setNotes] = useState('');
   
   // Single POS Modal step: 'closed' | 'checkout' | 'receipt'
@@ -235,7 +235,7 @@ export function POSPage() {
   const subtotalNet = subtotalGross - totalDiscount;
   const tax = subtotalNet * (db.settings.taxRate / 100);
   const total = subtotalNet + tax;
-  const cashNum = parseFloat(cashReceived) || 0;
+  const cashNum = cashReceived || 0;
   const change = paymentMethod === 'efectivo' && cashNum > total ? cashNum - total : 0;
 
   const handleCheckout = () => {
@@ -304,7 +304,7 @@ export function POSPage() {
       return;
     }
 
-    const cashValue = parseFloat(cashReceived) || 0;
+    const cashValue = cashReceived || 0;
     if (paymentMethod === 'efectivo' && cashValue < total) {
       toast.error('Efectivo insuficiente', 'El monto recibido es menor al total');
       return;
@@ -341,7 +341,7 @@ export function POSPage() {
     setLastSale(sale);
     setCart([]);
     setCustomerId('');
-    setCashReceived('');
+    setCashReceived(0);
     setNotes('');
     setPaymentMethod('efectivo');
     setPosStep('receipt');
@@ -732,12 +732,11 @@ export function POSPage() {
 
             {paymentMethod === 'efectivo' && (
               <div className="space-y-3">
-                <Input
-                  type="number"
+                <CurrencyInput
                   label="Efectivo recibido"
                   value={cashReceived}
-                  onChange={(e) => setCashReceived(e.target.value)}
-                  placeholder="0"
+                  onChange={(val) => setCashReceived(val)}
+                  currencySymbol={sym}
                   autoFocus
                 />
                 <div className="flex gap-2">
@@ -745,7 +744,7 @@ export function POSPage() {
                     <button
                       key={i}
                       type="button"
-                      onClick={() => setCashReceived(amt.toString())}
+                      onClick={() => setCashReceived(amt)}
                       className="flex-1 py-2 rounded-lg bg-surface-2 hover:bg-surface border border-border text-sm font-medium text-text"
                     >
                       {formatCurrency(amt, sym)}
@@ -1036,6 +1035,8 @@ export function POSPage() {
         open={showScannerModal}
         onClose={() => setShowScannerModal(false)}
         onScan={handleBarcodeScanned}
+        products={db.products}
+        sym={sym}
       />
     </div>
   );
@@ -1045,15 +1046,28 @@ function CameraScannerModal({
   open,
   onClose,
   onScan,
+  products,
+  sym,
 }: {
   open: boolean;
   onClose: () => void;
   onScan: (code: string) => void;
+  products: import('@/models/types').Product[];
+  sym: string;
 }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [lastScanned, setLastScanned] = useState('');
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const lastScanTimeRef = useRef<number>(0);
+
+  // Derived: find product matching the last scanned code
+  const scannedProduct = lastScanned
+    ? products.find(
+        (p) =>
+          p.barcode === lastScanned ||
+          p.sku.toLowerCase() === lastScanned.toLowerCase()
+      ) ?? null
+    : null;
 
   useEffect(() => {
     if (!open) return;
@@ -1118,18 +1132,63 @@ function CameraScannerModal({
     <Dialog open={open} onClose={onClose} title="Escáner de Código de Barras con Cámara" size="md">
       <div className="space-y-4">
         <p className="text-xs text-muted">
-          Apunta la cámara de tu celular, tablet o laptop al código de barras del producto. Se agregará automáticamente al carrito con un sonido de confirmación.
+          Apunta la cámara al código de barras del producto. Se agregará automáticamente al carrito con un sonido de confirmación.
         </p>
 
+        {/* Viewfinder */}
         <div className="relative overflow-hidden rounded-2xl bg-slate-950 aspect-video flex items-center justify-center border border-border shadow-inner">
           <div id="pos-camera-scanner-view" className="w-full h-full" />
 
           {lastScanned && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-emerald-500 text-white font-bold text-xs shadow-lg animate-bounce">
-              ¡Código detectado: {lastScanned}!
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-emerald-500 text-white font-bold text-xs shadow-lg">
+              ✓ Código detectado
             </div>
           )}
         </div>
+
+        {/* Product preview card */}
+        {lastScanned && (
+          <motion.div
+            key={lastScanned}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`rounded-xl border p-4 flex items-center gap-4 ${
+              scannedProduct
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-danger/10 border-danger/30'
+            }`}
+          >
+            {scannedProduct ? (
+              <>
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-text text-sm truncate">{scannedProduct.name}</p>
+                  <p className="text-xs text-muted">
+                    SKU: {scannedProduct.sku} &nbsp;·&nbsp; Código: {lastScanned}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400 text-base">
+                    {formatCurrency(scannedProduct.price, sym)}
+                  </p>
+                  <p className="text-xs text-muted">Stock: {scannedProduct.stock}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="h-10 w-10 rounded-xl bg-danger/20 flex items-center justify-center shrink-0">
+                  <XCircle className="h-5 w-5 text-danger" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-danger text-sm">Producto no encontrado</p>
+                  <p className="text-xs text-muted">Código escaneado: {lastScanned}</p>
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
 
         {errorMsg && (
           <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-xs font-medium">
