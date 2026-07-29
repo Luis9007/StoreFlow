@@ -55,7 +55,6 @@ export function SettingsPage() {
   const tabs = [
     { id: 'empresa', label: 'Empresa', icon: Building2 },
     { id: 'usuarios', label: 'Usuarios / Cajeros', icon: Users },
-    { id: 'auditoria', label: 'Bitácora de Actividad', icon: Shield },
     { id: 'apariencia', label: 'Apariencia', icon: Palette },
     { id: 'datos', label: 'Datos', icon: Database },
   ];
@@ -337,61 +336,7 @@ export function SettingsPage() {
             </Card>
           )}
 
-          {tab === 'auditoria' && (
-            <Card>
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <CardTitle>Bitácora de Actividad y Auditoría</CardTitle>
-                  <p className="text-sm text-muted mt-0.5">Historial completo de eventos y acciones registradas en StoreFlow</p>
-                </div>
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
-                  <Input
-                    value={auditSearch}
-                    onChange={(e) => setAuditSearch(e.target.value)}
-                    placeholder="Buscar por usuario, acción o detalle..."
-                    className="pl-9 text-xs"
-                  />
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {filteredAuditLogs.length === 0 ? (
-                  <div className="p-8 text-center text-muted">
-                    <Shield className="h-10 w-10 mx-auto mb-2 opacity-40" />
-                    <p className="font-medium text-text">Sin registros de actividad</p>
-                    <p className="text-xs">Los eventos registrados aparecerán aquí automáticamente.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-surface-2 text-muted border-b border-border font-semibold uppercase tracking-wider">
-                        <tr>
-                          <th className="p-3">Fecha y Hora</th>
-                          <th className="p-3">Acción</th>
-                          <th className="p-3">Usuario</th>
-                          <th className="p-3">Detalle</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {filteredAuditLogs.map((log) => (
-                          <tr key={log.id} className="hover:bg-surface-2/50 transition-colors">
-                            <td className="p-3 whitespace-nowrap text-muted font-mono">{formatDateTime(log.createdAt)}</td>
-                            <td className="p-3 whitespace-nowrap">
-                              <Badge variant="primary" className="font-medium">{log.action}</Badge>
-                            </td>
-                            <td className="p-3 whitespace-nowrap font-medium text-text">{log.userName}</td>
-                            <td className="p-3 text-text max-w-xs sm:max-w-md truncate">{log.detail}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {tab === 'apariencia' && (
+{tab === 'apariencia' && (
             <Card>
               <CardHeader><CardTitle>Tema y apariencia</CardTitle></CardHeader>
               <CardContent className="space-y-6">

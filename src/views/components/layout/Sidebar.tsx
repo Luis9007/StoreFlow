@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Users, Truck, Wallet,
-  BarChart3, Settings, Receipt, Boxes, LogOut, X,
+  BarChart3, Settings, Receipt, Boxes, LogOut, X, Shield,
 } from 'lucide-react';
 import { useStore } from '@/controllers/StoreController';
 import { canAccessModule, roleLabels, type ModuleKey } from '@/controllers/permissions';
@@ -22,6 +22,7 @@ const allNavItems = [
   { to: '/app/suppliers', label: 'Proveedores', icon: Truck, module: 'suppliers' as ModuleKey },
   { to: '/app/cash', label: 'Caja', icon: Wallet, module: 'cash' as ModuleKey },
   { to: '/app/reports', label: 'Reportes', icon: BarChart3, module: 'reports' as ModuleKey },
+  { to: '/app/logs', label: 'Bitácora', icon: Shield, module: 'logs' as ModuleKey },
   { to: '/app/settings', label: 'Configuración', icon: Settings, module: 'settings' as ModuleKey },
 ];
 

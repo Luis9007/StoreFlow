@@ -21,5 +21,6 @@ export const APP_ROUTES = {
   SUPPLIERS: '/app/suppliers',
   CASH: '/app/cash',
   REPORTS: '/app/reports',
+  LOGS: '/app/logs',
   SETTINGS: '/app/settings',
 } as const;

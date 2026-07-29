@@ -23,6 +23,7 @@ import { CustomersPage } from '../views/pages/CustomersPage';
 import { SuppliersPage } from '../views/pages/SuppliersPage';
 import { CashPage } from '../views/pages/CashPage';
 import { ReportsPage } from '../views/pages/ReportsPage';
+import { LogsPage } from '../views/pages/LogsPage';
 import { SettingsPage } from '../views/pages/SettingsPage';
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -61,6 +62,7 @@ export function AppRoutes() {
         <Route path="suppliers" element={<ModuleGuard module="suppliers"><SuppliersPage /></ModuleGuard>} />
         <Route path="cash" element={<ModuleGuard module="cash"><CashPage /></ModuleGuard>} />
         <Route path="reports" element={<ModuleGuard module="reports"><ReportsPage /></ModuleGuard>} />
+        <Route path="logs" element={<ModuleGuard module="logs"><LogsPage /></ModuleGuard>} />
         <Route path="settings" element={<ModuleGuard module="settings"><SettingsPage /></ModuleGuard>} />
       </Route>
       <Route path="*" element={<Navigate to="/app" replace />} />

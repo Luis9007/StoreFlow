@@ -186,3 +186,69 @@ export function daysAgo(n: number): Date {
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
+/**
+ * Exporta una matriz de datos a un archivo ejecutable por Microsoft Excel en formato SpreadsheetML (.xlsx / .xls).
+ */
+export function exportToExcel(filename: string, headers: string[], rows: (string | number)[][], sheetName = 'Reporte') {
+  const escapeXml = (str: string | number): string => {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  };
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Center"/>
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
+  </Style>
+  <Style ss:ID="Header">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>
+   <Interior ss:Color="#0284C7" ss:Pattern="Solid"/>
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="${escapeXml(sheetName)}">
+  <Table>
+   <Row ss:Height="24">`;
+
+  headers.forEach((h) => {
+    xml += `<Cell ss:StyleID="Header"><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`;
+  });
+  xml += `</Row>\n`;
+
+  rows.forEach((row) => {
+    xml += `   <Row ss:Height="20">`;
+    row.forEach((val) => {
+      const isNum = typeof val === 'number';
+      const dataType = isNum ? 'Number' : 'String';
+      xml += `<Cell><Data ss:Type="${dataType}">${escapeXml(val)}</Data></Cell>`;
+    });
+    xml += `</Row>\n`;
+  });
+
+  xml += `  </Table>
+ </Worksheet>
+</Workbook>`;
+
+  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const cleanFilename = filename.endsWith('.xls') || filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+  a.download = cleanFilename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

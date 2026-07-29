@@ -13,7 +13,7 @@ import type { Role } from '../models/types';
 /** Claves identificadoras de los módulos principales de la aplicación */
 export type ModuleKey =
   | 'dashboard' | 'pos' | 'products' | 'inventory' | 'purchases'
-  | 'customers' | 'suppliers' | 'cash' | 'reports' | 'settings';
+  | 'customers' | 'suppliers' | 'cash' | 'reports' | 'logs' | 'settings';
 
 /** Claves identificadoras de las acciones específicas restringidas */
 export type ActionKey =
@@ -31,7 +31,7 @@ export type ActionKey =
 
 /** Matriz de asignación de acceso a módulos por rol */
 const moduleAccess: Record<Role, ModuleKey[]> = {
-  supervisor: ['dashboard', 'pos', 'products', 'inventory', 'purchases', 'customers', 'suppliers', 'cash', 'reports', 'settings'],
+  supervisor: ['dashboard', 'pos', 'products', 'inventory', 'purchases', 'customers', 'suppliers', 'cash', 'reports', 'logs', 'settings'],
   cajero: ['dashboard', 'pos', 'customers', 'cash', 'reports'],
 };
 

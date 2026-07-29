@@ -18,7 +18,7 @@ import { PageHeader } from '@/views/components/ui/PageHeader';
 import { Select, Input } from '@/views/components/ui/Input';
 import { Dialog } from '@/views/components/ui/Dialog';
 import { DataTable, type Column } from '@/views/components/ui/DataTable';
-import { formatCurrency, formatNumber, formatDateTime, isSameDay, daysAgo, cn } from '@/lib/utils';
+import { formatCurrency, formatNumber, formatDateTime, isSameDay, daysAgo, cn, exportToExcel } from '@/lib/utils';
 import type { Sale } from '@/models/types';
 
 export function ReportsPage() {
@@ -111,16 +111,26 @@ export function ReportsPage() {
     return hours.filter((h) => h.ventas > 0);
   }, [filteredSales]);
 
-  const exportCSV = () => {
-    const headers = ['Folio', 'Fecha', 'Cliente', 'Subtotal', 'IVA', 'Total', 'Pago', 'Estado'];
-    const rows = filteredSales.map((s) => [s.reference, s.createdAt, s.customerName, s.subtotal, s.tax, s.total, s.paymentMethod, s.status]);
-    const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `reporte_ventas_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportExcel = () => {
+    if (filteredSales.length === 0) {
+      toast.warning('Sin ventas', 'No hay datos de ventas en este período para exportar');
+      return;
+    }
+    const headers = ['Folio', 'Fecha y Hora', 'Cliente', 'Vendedor', 'Subtotal', 'Descuento', 'IVA', 'Total', 'Método Pago', 'Estado'];
+    const rows = filteredSales.map((s) => [
+      s.reference,
+      formatDateTime(s.createdAt),
+      s.customerName,
+      s.userName,
+      s.subtotal,
+      s.discount || 0,
+      s.tax,
+      s.total,
+      s.paymentMethod,
+      s.status,
+    ]);
+    exportToExcel(`reporte_ventas_${new Date().toISOString().slice(0, 10)}.xlsx`, headers, rows, 'Ventas');
+    toast.success('Reporte exportado', 'El archivo de Excel (.xlsx) se descargó correctamente');
   };
 
   const handleVoidSale = (saleId: string) => {
@@ -142,71 +152,31 @@ export function ReportsPage() {
       header: 'Folio',
       render: (s) => (
         <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-primary shrink-0" />
-          <span className="font-display font-bold text-text text-sm">{s.reference}</span>
+          <span className="font-semibold text-text font-mono">{s.reference}</span>
+          {s.status === 'anulada' && <Badge variant="danger">Anulada</Badge>}
         </div>
       ),
     },
-    {
-      key: 'createdAt',
-      header: 'Fecha y Hora',
-      render: (s) => <span className="text-muted text-xs">{formatDateTime(s.createdAt)}</span>,
-    },
-    {
-      key: 'customerName',
-      header: 'Cliente',
-      render: (s) => <span className="font-medium text-text">{s.customerName}</span>,
-    },
-    {
-      key: 'items',
-      header: 'Artículos',
-      align: 'center',
-      render: (s) => <Badge variant="info">{s.items.reduce((acc, i) => acc + i.quantity, 0)}</Badge>,
-    },
-    {
-      key: 'paymentMethod',
-      header: 'Pago',
-      align: 'center',
-      render: (s) => (
-        <Badge variant={s.paymentMethod === 'credito' ? 'warning' : 'default'} className="capitalize">
-          {s.paymentMethod}
-        </Badge>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Estado',
-      align: 'center',
-      render: (s) => (
-        <Badge variant={s.status === 'completada' ? 'success' : 'danger'}>
-          {s.status}
-        </Badge>
-      ),
-    },
-    {
-      key: 'total',
-      header: 'Total',
-      align: 'right',
-      render: (s) => <span className="font-display font-bold text-primary text-sm">{formatCurrency(s.total, sym)}</span>,
-    },
+    { key: 'createdAt', header: 'Fecha', render: (s) => <span className="text-muted text-xs">{formatDateTime(s.createdAt)}</span> },
+    { key: 'customerName', header: 'Cliente', render: (s) => <span className="font-medium text-text">{s.customerName}</span> },
+    { key: 'userName', header: 'Vendedor', render: (s) => <span className="text-muted text-xs">{s.userName}</span> },
+    { key: 'paymentMethod', header: 'Pago', render: (s) => <Badge variant="info" className="capitalize">{s.paymentMethod}</Badge> },
+    { key: 'total', header: 'Total', align: 'right', render: (s) => <span className={cn('font-bold', s.status === 'anulada' ? 'line-through text-muted' : 'text-text')}>{formatCurrency(s.total, sym)}</span> },
     {
       key: 'actions',
       header: '',
       align: 'right',
       render: (s) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); setSelectedSale(s); }}
-          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-surface-2 hover:bg-surface border border-border text-text transition-colors flex items-center gap-1 ml-auto"
-        >
-          <Eye className="h-3.5 w-3.5" /> Detalle
-        </button>
+        <Button size="sm" variant="ghost" onClick={() => setSelectedSale(s)}>
+          <Eye className="h-4 w-4" /> Detalle
+        </Button>
       ),
     },
   ];
 
   return (
-    <div>
-      <Breadcrumb items={[{ label: 'Inicio', href: '/app' }, { label: 'Reportes & Ventas' }]} className="mb-3" />
+    <div className="space-y-6">
+      <Breadcrumb items={[{ label: 'Inicio', href: '/app' }, { label: 'Reportes' }]} />
       <PageHeader
         title="Reportes & Historial de Ventas"
         description="Métricas financieras y búsqueda completa de ventas por número de folio"
@@ -218,7 +188,7 @@ export function ReportsPage() {
               <option value="30d">30 días</option>
               <option value="all">Todo</option>
             </Select>
-            {canExport && <Button variant="outline" onClick={exportCSV}><Download className="h-4 w-4" /> Exportar</Button>}
+            {canExport && <Button variant="outline" onClick={exportExcel}><Download className="h-4 w-4" /> Exportar a Excel</Button>}
           </div>
         }
       />
