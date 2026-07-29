@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Package, Plus, Search, Pencil, Trash2, Star, AlertTriangle, Barcode, DollarSign, Wand2,
+  Package, Plus, Search, Pencil, Trash2, Star, AlertTriangle, Barcode, DollarSign, Wand2, Camera, Loader2, Sparkles,
 } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { useStore } from '@/controllers/StoreController';
 import { useToast } from '@/views/components/ui/Toast';
 import { canPerformAction } from '@/controllers/permissions';
@@ -15,6 +16,26 @@ import { Breadcrumb } from '@/views/components/ui/Breadcrumb';
 import { PageHeader } from '@/views/components/ui/PageHeader';
 import { formatCurrency, generateSequentialId, generateSkuFromName, cn } from '@/lib/utils';
 import type { Product, Category } from '@/models/types';
+
+const playBeep = () => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(987.77, ctx.currentTime);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.12);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.12);
+  } catch {
+    // Ignore audio errors
+  }
+};
 
 const PRODUCT_UNITS = [
   { value: 'pza', label: 'Pieza (pza)' },
@@ -64,6 +85,8 @@ export function ProductsPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryForm, setNewCategoryForm] = useState({ name: '', color: '#0ea5e9' });
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [showProductScanner, setShowProductScanner] = useState(false);
+  const [isSearchingExternal, setIsSearchingExternal] = useState(false);
 
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,6 +120,55 @@ export function ProductsPage() {
     setShowCategoryModal(false);
     setNewCategoryForm({ name: '', color: '#0ea5e9' });
     toast.success('Categoría creada', `Categoría "${newCategory.name}" registrada y seleccionada`);
+  };
+
+  const handleScanBarcodeForProduct = async (code: string) => {
+    const cleanCode = code.trim();
+    if (!cleanCode || !editing) return;
+
+    playBeep();
+    setShowProductScanner(false);
+    setIsSearchingExternal(true);
+
+    let updatedName = editing.name;
+    let updatedDesc = editing.description;
+
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(cleanCode)}.json`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 1 && data.product) {
+          const p = data.product;
+          const nameFromApi = (p.product_name_es || p.product_name || p.abbreviated_product_name || '').trim();
+          if (nameFromApi && !editing.name) {
+            updatedName = nameFromApi;
+          }
+          if (!editing.description && (p.generic_name_es || p.generic_name)) {
+            updatedDesc = (p.generic_name_es || p.generic_name).trim();
+          }
+        }
+      }
+    } catch {
+      // Ignore network errors
+    } finally {
+      setIsSearchingExternal(false);
+    }
+
+    const generatedSku = updatedName ? generateSkuFromName(updatedName) : (editing.sku || cleanCode);
+
+    setEditing({
+      ...editing,
+      barcode: cleanCode,
+      name: updatedName,
+      description: updatedDesc,
+      sku: generatedSku,
+    });
+
+    if (updatedName && updatedName !== editing.name) {
+      toast.success('¡Producto identificado!', `Se autocompletó el nombre: "${updatedName}" y código: ${cleanCode}`);
+    } else {
+      toast.success('Código de barras capturado', `Código ${cleanCode} asignado al producto.`);
+    }
   };
 
   const filtered = useMemo(() => {
@@ -305,7 +377,34 @@ export function ProductsPage() {
                 placeholder="Ej. COCA-COLA-600ML"
               />
             </div>
-            <Input label="Código de barras" value={editing.barcode} onChange={(e) => setEditing({ ...editing, barcode: e.target.value })} placeholder="750..." />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-text">Código de barras</span>
+                <button
+                  type="button"
+                  onClick={() => setShowProductScanner(true)}
+                  className="text-[11px] text-primary hover:underline flex items-center gap-1 font-semibold"
+                >
+                  <Camera className="h-3 w-3" /> Escanear con Cámara
+                </button>
+              </div>
+              <div className="relative flex items-center">
+                <Input
+                  value={editing.barcode}
+                  onChange={(e) => setEditing({ ...editing, barcode: e.target.value })}
+                  placeholder="750... o escanea el código"
+                  className="w-full pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowProductScanner(true)}
+                  title="Escanear código de barras con la cámara"
+                  className="absolute right-2.5 p-1.5 rounded bg-surface-2 hover:bg-surface border border-border text-primary transition-colors flex items-center justify-center"
+                >
+                  {isSearchingExternal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            </div>
             <div>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-medium text-text">Categoría</span>
@@ -415,6 +514,114 @@ export function ProductsPage() {
       <Dialog open={!!deleteId} onClose={() => setDeleteId(null)} title="Eliminar producto" size="sm" footer={<><Button variant="outline" onClick={() => setDeleteId(null)}>Cancelar</Button><Button variant="danger" onClick={handleDelete}>Eliminar</Button></>}>
         <p className="text-sm text-muted">¿Estás seguro de eliminar este producto? Esta acción no se puede deshacer.</p>
       </Dialog>
+
+      {/* Product Scanner Dialog */}
+      <ProductScannerModal
+        open={showProductScanner}
+        onClose={() => setShowProductScanner(false)}
+        onScan={handleScanBarcodeForProduct}
+      />
     </div>
+  );
+}
+
+function ProductScannerModal({
+  open,
+  onClose,
+  onScan,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onScan: (code: string) => void;
+}) {
+  const [errorMsg, setErrorMsg] = useState('');
+  const [lastScanned, setLastScanned] = useState('');
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setErrorMsg('');
+    setLastScanned('');
+    let html5Qrcode: Html5Qrcode | null = null;
+    const elementId = 'product-camera-scanner-view';
+
+    const startScanner = async () => {
+      try {
+        html5Qrcode = new Html5Qrcode(elementId);
+        scannerRef.current = html5Qrcode;
+
+        await html5Qrcode.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+              const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+              return {
+                width: Math.floor(minEdge * 0.85),
+                height: Math.floor(minEdge * 0.55),
+              };
+            },
+          },
+          (decodedText) => {
+            setLastScanned(decodedText);
+            onScan(decodedText);
+          },
+          () => {}
+        );
+      } catch (err: any) {
+        console.error('Error al iniciar el escáner de producto:', err);
+        setErrorMsg('No se pudo acceder a la cámara. Revisa los permisos de tu navegador.');
+      }
+    };
+
+    const timer = setTimeout(startScanner, 250);
+
+    return () => {
+      clearTimeout(timer);
+      if (scannerRef.current) {
+        if (scannerRef.current.isScanning) {
+          scannerRef.current
+            .stop()
+            .then(() => scannerRef.current?.clear())
+            .catch(() => {});
+        } else {
+          try {
+            scannerRef.current.clear();
+          } catch {}
+        }
+      }
+    };
+  }, [open]);
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Escanear Código para Nuevo Producto" size="md">
+      <div className="space-y-4">
+        <p className="text-xs text-muted">
+          Apunta la cámara al código de barras. El código se asignará al formulario y buscará automáticamente el nombre en la base de datos global de productos.
+        </p>
+
+        <div className="relative overflow-hidden rounded-2xl bg-slate-950 aspect-video flex items-center justify-center border border-border shadow-inner">
+          <div id="product-camera-scanner-view" className="w-full h-full" />
+
+          {lastScanned && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-emerald-500 text-white font-bold text-xs shadow-lg animate-bounce">
+              ¡Código capturado: {lastScanned}!
+            </div>
+          )}
+        </div>
+
+        {errorMsg && (
+          <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-xs font-medium">
+            {errorMsg}
+          </div>
+        )}
+
+        <div className="flex justify-end border-t border-border pt-3">
+          <Button variant="outline" onClick={onClose}>
+            Cerrar Escáner
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
