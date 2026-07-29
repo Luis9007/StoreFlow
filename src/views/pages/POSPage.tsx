@@ -8,7 +8,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { useStore } from '@/controllers/StoreController';
 import { useToast } from '@/views/components/ui/Toast';
 import { Button } from '@/views/components/ui/Button';
-import { Input, Select } from '@/views/components/ui/Input';
+import { Input, Select, CurrencyInput } from '@/views/components/ui/Input';
 import { Card, Badge, EmptyState } from '@/views/components/ui/Card';
 import { Dialog } from '@/views/components/ui/Dialog';
 import { Breadcrumb } from '@/views/components/ui/Breadcrumb';
@@ -63,7 +63,7 @@ export function POSPage() {
   
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const [showQuickOpenCashModal, setShowQuickOpenCashModal] = useState(false);
-  const [quickOpenAmount, setQuickOpenAmount] = useState('50000');
+  const [quickOpenAmount, setQuickOpenAmount] = useState<number>(50000);
   const [showFolioModal, setShowFolioModal] = useState(false);
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [folioSearchInput, setFolioSearchInput] = useState('');
@@ -916,28 +916,26 @@ export function POSPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            const amt = parseFloat(quickOpenAmount) || 0;
+            const amt = quickOpenAmount || 0;
             openCash(amt);
             toast.success('Caja abierta', `Monto inicial: ${formatCurrency(amt, sym)}`);
             setShowQuickOpenCashModal(false);
           }}
           className="space-y-4"
         >
-          <Input
+          <CurrencyInput
             label="Monto inicial en caja (Base) *"
-            type="number"
             value={quickOpenAmount}
-            onChange={(e) => setQuickOpenAmount(e.target.value)}
-            placeholder="50000"
+            onChange={(val) => setQuickOpenAmount(val)}
+            currencySymbol={sym}
             autoFocus
-            required
           />
           <div className="flex gap-2">
             {[20000, 50000, 100000].map((amt) => (
               <button
                 key={amt}
                 type="button"
-                onClick={() => setQuickOpenAmount(amt.toString())}
+                onClick={() => setQuickOpenAmount(amt)}
                 className="flex-1 py-2 rounded-lg bg-surface-2 hover:bg-surface border border-border text-xs font-medium text-text transition-colors"
               >
                 {formatCurrency(amt, sym)}
