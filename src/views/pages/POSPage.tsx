@@ -2,8 +2,9 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Star, Trash2, Plus, Minus, ShoppingCart, X, CreditCard,
-  Wallet, Banknote, Clock, Barcode, CheckCircle2, Printer, User, UserPlus, FileText, Lock, Unlock, Store,
+  Wallet, Banknote, Clock, Barcode, CheckCircle2, Printer, User, UserPlus, FileText, Lock, Unlock, Store, Camera,
 } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { useStore } from '@/controllers/StoreController';
 import { useToast } from '@/views/components/ui/Toast';
 import { Button } from '@/views/components/ui/Button';
@@ -22,6 +23,26 @@ interface CartLine {
   discount: number;
   stock: number;
 }
+
+const playBeep = () => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(987.77, ctx.currentTime);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.12);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.12);
+  } catch {
+    // Ignore audio context errors
+  }
+};
 
 export function POSPage() {
   const { db, currentUser, addSale, upsertCustomer, activeCashSession, openCash } = useStore();
@@ -44,6 +65,7 @@ export function POSPage() {
   const [showQuickOpenCashModal, setShowQuickOpenCashModal] = useState(false);
   const [quickOpenAmount, setQuickOpenAmount] = useState('50000');
   const [showFolioModal, setShowFolioModal] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
   const [folioSearchInput, setFolioSearchInput] = useState('');
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -109,6 +131,64 @@ export function POSPage() {
       }
       return [...prev, { productId: product.id, productName: product.name, price: product.price, quantity: 1, discount: 0, stock: product.stock }];
     });
+  };
+
+  const handleBarcodeScanned = (code: string) => {
+    const cleanCode = code.trim().toLowerCase();
+    const product = db.products.find(
+      (p) =>
+        p.active &&
+        (p.barcode.toLowerCase() === cleanCode || p.sku.toLowerCase() === cleanCode || p.id.toLowerCase() === cleanCode)
+    );
+
+    if (!product) {
+      toast.error('Producto no encontrado', `Código escaneado: "${code}"`);
+      return;
+    }
+
+    if (product.stock <= 0) {
+      toast.error('Sin stock', `${product.name} no tiene existencias`);
+      return;
+    }
+
+    playBeep();
+    addToCart(product);
+    toast.success('Producto agregado', `${product.name} — ${formatCurrency(product.price, sym)}`);
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && search.trim()) {
+      e.preventDefault();
+      const clean = search.trim().toLowerCase();
+      const exactMatch = db.products.find(
+        (p) =>
+          p.active &&
+          (p.barcode.toLowerCase() === clean || p.sku.toLowerCase() === clean || p.name.toLowerCase() === clean)
+      );
+
+      if (exactMatch) {
+        if (exactMatch.stock <= 0) {
+          toast.error('Sin stock', `${exactMatch.name} no tiene existencias`);
+          return;
+        }
+        playBeep();
+        addToCart(exactMatch);
+        toast.success('Producto agregado', exactMatch.name);
+        setSearch('');
+      } else if (filteredProducts.length === 1) {
+        const prod = filteredProducts[0];
+        if (prod.stock <= 0) {
+          toast.error('Sin stock', `${prod.name} no tiene existencias`);
+          return;
+        }
+        playBeep();
+        addToCart(prod);
+        toast.success('Producto agregado', prod.name);
+        setSearch('');
+      } else {
+        toast.error('No encontrado', `No se encontró coincidencia para "${search}"`);
+      }
+    }
   };
 
   const updateQty = (productId: string, delta: number) => {
@@ -285,9 +365,14 @@ export function POSPage() {
             <span className="truncate max-w-[200px]">{db.settings.name || 'StoreFlow'}</span>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setShowFolioModal(true)}>
-          <FileText className="h-4 w-4" /> Buscar Folio
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="primary" size="sm" onClick={() => setShowScannerModal(true)} className="shadow-sm">
+            <Camera className="h-4 w-4" /> Escanear Cámara
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowFolioModal(true)}>
+            <FileText className="h-4 w-4" /> Buscar Folio
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-4 min-h-0">
@@ -295,16 +380,25 @@ export function POSPage() {
         <div className="flex flex-col min-h-0">
           {/* Search + filters */}
           <div className="space-y-3 mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted" />
+            <div className="relative flex items-center">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted pointer-events-none" />
               <input
                 ref={searchRef}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nombre, SKU o código de barras... (presiona /)"
-                className="w-full h-12 pl-11 pr-4 rounded-xl bg-surface border border-border text-text placeholder:text-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Escanear o buscar por nombre, SKU, código de barras... (Enter para agregar)"
+                className="w-full h-12 pl-11 pr-12 rounded-xl bg-surface border border-border text-text placeholder:text-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
               />
+              <button
+                type="button"
+                onClick={() => setShowScannerModal(true)}
+                title="Escanear código de barras con la cámara"
+                className="absolute right-3 p-1.5 rounded-lg bg-surface-2 hover:bg-surface border border-border text-primary transition-colors flex items-center justify-center"
+              >
+                <Camera className="h-4 w-4" />
+              </button>
             </div>
             <div className="flex items-center gap-2 overflow-x-auto sf-no-scrollbar pb-1">
               <button
@@ -938,6 +1032,119 @@ export function POSPage() {
           </div>
         </div>
       )}
+
+      {/* Camera Barcode Scanner Dialog */}
+      <CameraScannerModal
+        open={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        onScan={handleBarcodeScanned}
+      />
     </div>
+  );
+}
+
+function CameraScannerModal({
+  open,
+  onClose,
+  onScan,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onScan: (code: string) => void;
+}) {
+  const [errorMsg, setErrorMsg] = useState('');
+  const [lastScanned, setLastScanned] = useState('');
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const lastScanTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!open) return;
+    setErrorMsg('');
+    setLastScanned('');
+    let html5Qrcode: Html5Qrcode | null = null;
+    const elementId = 'pos-camera-scanner-view';
+
+    const startScanner = async () => {
+      try {
+        html5Qrcode = new Html5Qrcode(elementId);
+        scannerRef.current = html5Qrcode;
+
+        await html5Qrcode.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+              const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+              return {
+                width: Math.floor(minEdge * 0.85),
+                height: Math.floor(minEdge * 0.55),
+              };
+            },
+          },
+          (decodedText) => {
+            const now = Date.now();
+            if (now - lastScanTimeRef.current > 1500) {
+              lastScanTimeRef.current = now;
+              setLastScanned(decodedText);
+              onScan(decodedText);
+            }
+          },
+          () => {}
+        );
+      } catch (err: any) {
+        console.error('Error al iniciar el escáner de cámara:', err);
+        setErrorMsg('No se pudo acceder a la cámara. Revisa los permisos de tu navegador.');
+      }
+    };
+
+    const timer = setTimeout(startScanner, 250);
+
+    return () => {
+      clearTimeout(timer);
+      if (scannerRef.current) {
+        if (scannerRef.current.isScanning) {
+          scannerRef.current
+            .stop()
+            .then(() => scannerRef.current?.clear())
+            .catch(() => {});
+        } else {
+          try {
+            scannerRef.current.clear();
+          } catch {}
+        }
+      }
+    };
+  }, [open]);
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Escáner de Código de Barras con Cámara" size="md">
+      <div className="space-y-4">
+        <p className="text-xs text-muted">
+          Apunta la cámara de tu celular, tablet o laptop al código de barras del producto. Se agregará automáticamente al carrito con un sonido de confirmación.
+        </p>
+
+        <div className="relative overflow-hidden rounded-2xl bg-slate-950 aspect-video flex items-center justify-center border border-border shadow-inner">
+          <div id="pos-camera-scanner-view" className="w-full h-full" />
+
+          {lastScanned && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-emerald-500 text-white font-bold text-xs shadow-lg animate-bounce">
+              ¡Código detectado: {lastScanned}!
+            </div>
+          )}
+        </div>
+
+        {errorMsg && (
+          <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-xs font-medium">
+            {errorMsg}
+          </div>
+        )}
+
+        <div className="flex justify-end border-t border-border pt-3">
+          <Button variant="outline" onClick={onClose}>
+            Cerrar Escáner
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
