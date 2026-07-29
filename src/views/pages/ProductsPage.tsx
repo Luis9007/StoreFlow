@@ -8,7 +8,7 @@ import { useStore } from '@/controllers/StoreController';
 import { useToast } from '@/views/components/ui/Toast';
 import { canPerformAction } from '@/controllers/permissions';
 import { Button } from '@/views/components/ui/Button';
-import { Input, Select, Textarea } from '@/views/components/ui/Input';
+import { Input, Select, Textarea, CurrencyInput, NumberInput } from '@/views/components/ui/Input';
 import { Card, CardContent, Badge, EmptyState } from '@/views/components/ui/Card';
 import { Dialog } from '@/views/components/ui/Dialog';
 import { DataTable, type Column } from '@/views/components/ui/DataTable';
@@ -544,10 +544,28 @@ export function ProductsPage() {
                 <option value={editing.unit}>{editing.unit} (Personalizado)</option>
               )}
             </Select>
-            <Input type="number" step="0.01" label="Costo" value={editing.cost} onChange={(e) => setEditing({ ...editing, cost: parseFloat(e.target.value) || 0 })} />
-            <Input type="number" step="0.01" label="Precio de venta" value={editing.price} onChange={(e) => setEditing({ ...editing, price: parseFloat(e.target.value) || 0 })} />
-            <Input type="number" label="Stock actual" value={editing.stock} onChange={(e) => setEditing({ ...editing, stock: parseInt(e.target.value) || 0 })} />
-            <Input type="number" label="Stock mínimo" value={editing.minStock} onChange={(e) => setEditing({ ...editing, minStock: parseInt(e.target.value) || 0 })} />
+            <CurrencyInput
+              label="Costo"
+              value={editing.cost}
+              onChange={(val) => setEditing({ ...editing, cost: val })}
+              currencySymbol={sym}
+            />
+            <CurrencyInput
+              label="Precio de venta"
+              value={editing.price}
+              onChange={(val) => setEditing({ ...editing, price: val })}
+              currencySymbol={sym}
+            />
+            <NumberInput
+              label="Stock actual"
+              value={editing.stock}
+              onChange={(val) => setEditing({ ...editing, stock: val })}
+            />
+            <NumberInput
+              label="Stock mínimo"
+              value={editing.minStock}
+              onChange={(val) => setEditing({ ...editing, minStock: val })}
+            />
             <Textarea label="Descripción" value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} className="sm:col-span-2" />
             <div className="flex items-center gap-4 sm:col-span-2">
               <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
